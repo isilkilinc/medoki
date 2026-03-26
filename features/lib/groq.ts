@@ -54,6 +54,7 @@ export function normalizeUserExperiences(raw: unknown): string[] {
 }
 
 export interface MedicineResult {
+  correctedTerm: string;
   purpose: string;
   dosage: string;
   sideEffects: string[];
@@ -74,6 +75,7 @@ export interface SymptomProduct {
 }
 
 export interface SymptomResult {
+  correctedTerm: string;
   intro: string;
   products: SymptomProduct[];
   generalTips: string[];
@@ -96,6 +98,7 @@ Kullanıcıdan gelen ilaç adını analiz et: "${userText}"
 Yalnızca geçerli JSON döndür. Markdown, ek açıklama, code block kullanma.
 JSON şeması:
 {
+  "correctedTerm": "string",
   "purpose": "string",
   "dosage": "string",
   "sideEffects": ["string", "string", "string"],
@@ -107,6 +110,8 @@ JSON şeması:
 
 Kurallar:
 - Dil: Türkçe.
+- ÖNEMLİ: Kullanıcının girdiği metindeki bariz yazım hatalarını veya argoları (örn. "reg" -> "regl") otomatik olarak doğru ve profesyonel tıbbi terime çevir.
+- Sonucun özetini (summary) ve tüm açıklamalarını mutlaka bu düzeltilmiş, profesyonel tıbbi terimi kullanarak oluştur.
 - Bilimsel doğruluk öncelikli, ama sade ve anlaşılır yaz.
 - Emin olmadığın bilgi varsa "Prospektüste doğrulayın" gibi net uyarı ekle.
 - Reçete önerme; sadece genel bilgilendirme yap.
@@ -115,6 +120,7 @@ Kurallar:
   const parsed = await groqJsonCompletion(prompt, 1100);
 
   return {
+    correctedTerm: parsed.correctedTerm || userText,
     purpose: parsed.purpose || "Bilgi alınamadı.",
     dosage: parsed.dosage || "Bilgi alınamadı.",
     sideEffects: Array.isArray(parsed.sideEffects) && parsed.sideEffects.length ? parsed.sideEffects : ["Bilgi alınamadı."],
@@ -136,6 +142,7 @@ Her öneride yalnızca etken madde adını tek başına yazma: Türkiye'de eczan
 Yalnızca geçerli JSON döndür. Markdown, ek açıklama, code block kullanma.
 JSON şeması:
 {
+  "correctedTerm": "string",
   "intro": "string",
   "products": [
     {
@@ -155,6 +162,8 @@ JSON şeması:
 
 Kurallar:
 - Dil: Türkçe.
+- ÖNEMLİ: Kullanıcının girdiği metindeki bariz tıbbi yazım hatalarını veya argoları (örn. "reg" -> "regl", "başş" -> "baş ağrısı") otomatik olarak doğru ve profesyonel tıbbi terime çevir.
+- "intro" metnini ve geri kalan tüm açıklamaları mutlaka bu düzeltilmiş, profesyonel tıbbi terimi kullanarak oluştur.
 - 3 ila 5 arası ürün öner.
 - Her products öğesinde activeIngredient ve brandExamples (en az 2 marka) zorunlu.
 - Hamilelik, kronik hastalık, çocuk, alerji gibi durumlarda mutlaka eczacı/doktor uyarısı yaz.
@@ -164,6 +173,7 @@ Kurallar:
   const products = Array.isArray(parsed.products) ? parsed.products : [];
 
   return {
+    correctedTerm: parsed.correctedTerm || userText,
     intro: parsed.intro || "Bilgi alınamadı.",
     products: products.map((p: any) => {
       const activeIngredient = (p.activeIngredient || p.name || "").trim();
@@ -209,19 +219,18 @@ export interface MedicineValidation {
 }
 
 export async function validateMedicine(userText: string): Promise<MedicineValidation> {
-  const prompt = `Sen Türkiye'deki eczanelere son derece hakim bir eczacılık uzmanısın. Kullanıcı şu metni ilaç adı olarak girdi: "${userText}".
-Majezik, Parol, Arveles, Aspirin gibi yaygın veya benzersiz ilaç markalarını asla yazım hatası olarak görme. Eğer girdiğim kelime gerçek bir ilaç markasıysa kesinlikle isValid: true olarak dön ve öneri sunma.
+  const prompt = `Sen Türkiye'deki eczanelere ve tıp literatürüne son derece hakim bir uzmansın. Kullanıcı şu metni (ilaç adı, şikayet veya tıbbi terim) girdi: "${userText}".
 Yalnızca geçerli JSON döndür:
 {
   "isValid": boolean, 
   "isTypo": boolean, 
-  "suggestion": "Eğer isTypo true ise, doğru ilaç adı. Aksi halde null"
+  "suggestion": "Eğer isTypo true ise ve %100 eminsen, en doğru profesyonel tıbbi terim/ilaç adı. Aksi halde null"
 }
 Kurallar:
-1. Eğer girdiğim kelime (Örn: Majezik, Parol) zaten doğru bir ilaç adıysa, KESİNLİKLE isValid: true ve isTypo: false dön. suggestion null olsun.
-2. Sadece çok bariz harf hatalarında (Örn: Macezik -> Majezik, medacasol -> Madecassol) isTypo: true ve isValid: false yap.
-3. Asla kelimeyi uydurma veya alakasız kelimelere çevirme (Örn: Majezik kelimesini Majör yapmak YASAKTIR). Girdi ile öneri arasında anlamsız bir uçurum olmamalıdır.
-4. Metin anlamsızsa (örn: asdfg) veya tıbbi değilse isValid: false ve isTypo: false dön.`;
+1. Girdi kelime, zaten doğru ve mantıklı bir tıbbi terim veya ilaç adıysa (Örn: Majezik, Parol, Baş ağrısı), kesinlikle isValid: true ve isTypo: false dön, suggestion null olsun.
+2. Yazım hatası veya argo varsa (Örn: "Macezik" -> "Majezik", "reg aris" veya "reg" -> "Regl Ağrısı", "başş" -> "Baş Ağrısı"), isValid: false, isTypo: true dön. BURASI ÇOK ÖNEMLİ: Yalnızca, düzelttiğin kelime tıp literatüründe kesin ve profesyonel bir terimse suggestion alanını doldur.
+3. Asla uydurma, anlamsız kelimeler veya birbiriyle alakasız derme çatma tamlamalar (Örn: "Reg Aferi") üretme. %100 emin olmadığın tıbbi veya ilaç adları için suggestion: null yap ve isTypo: false yap.
+4. Girdi tamamen anlamsızsa (örn: "asdfg") veya tıbbi veya ilaç karşılığı yoksa, uydurma üretme (isValid: false, isTypo: false, suggestion: null).`;
   try {
     const parsed = await groqJsonCompletion(prompt, 100);
     return {

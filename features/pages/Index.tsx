@@ -1,12 +1,12 @@
 import { useState } from "react";
-import AmbientBackground from "@/features/components/AmbientBackground";
-import HomeScreen from "@/features/components/HomeScreen";
-import ResultsScreen from "@/features/components/ResultsScreen";
-import SearchScreen from "@/features/components/SearchScreen";
-import ScanOverlay from "@/features/components/ScanOverlay";
-import BottomNav, { TabType } from "@/features/components/BottomNav";
-import ProfileScreen from "@/features/components/ProfileScreen";
-import SettingsScreen from "@/features/components/SettingsScreen";
+import AmbientBackground from "@/components/AmbientBackground";
+import HomeScreen from "@/components/HomeScreen";
+import ResultsScreen from "@/components/ResultsScreen";
+import SearchScreen from "@/components/SearchScreen";
+import ScanOverlay from "@/components/ScanOverlay";
+import BottomNav, { TabType } from "@/components/BottomNav";
+import ProfileScreen from "@/components/ProfileScreen";
+import SettingsScreen from "@/components/SettingsScreen";
 import type { ReactNode } from "react";
 import { analyzeMedicine, analyzeSymptom, validateMedicine } from "@/lib/groq";
 import type { MedicineResult, SymptomResult } from "@/lib/groq";
@@ -30,13 +30,13 @@ const Index = () => {
 
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("medoki_recent_searches");
+      const saved = localStorage.getItem("medoki_recent_searches_v2");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           const cleanHistory = parsed.filter((item: string) => !/macezik|medacasol/i.test(item));
           if (cleanHistory.length !== parsed.length) {
-            localStorage.setItem("medoki_recent_searches", JSON.stringify(cleanHistory.length ? cleanHistory : ["Parol", "Arveles", "Majezik"]));
+            localStorage.setItem("medoki_recent_searches_v2", JSON.stringify(cleanHistory.length ? cleanHistory : ["Parol", "Arveles", "Majezik"]));
           }
           return cleanHistory.length ? cleanHistory : ["Parol", "Arveles", "Majezik"];
         } catch {}
@@ -49,7 +49,7 @@ const Index = () => {
     setRecentSearches(prev => {
       const filtered = prev.filter(item => item.toLowerCase() !== term.toLowerCase());
       const updated = [term, ...filtered].slice(0, 5);
-      localStorage.setItem("medoki_recent_searches", JSON.stringify(updated));
+      localStorage.setItem("medoki_recent_searches_v2", JSON.stringify(updated));
       return updated;
     });
   };
@@ -57,7 +57,7 @@ const Index = () => {
   const handleDeleteSearch = (term: string) => {
     setRecentSearches(prev => {
       const updated = prev.filter(item => item !== term);
-      localStorage.setItem("medoki_recent_searches", JSON.stringify(updated));
+      localStorage.setItem("medoki_recent_searches_v2", JSON.stringify(updated));
       return updated;
     });
   };
@@ -109,12 +109,12 @@ const Index = () => {
           return;
         }
 
-        saveToHistory(text);
         const res = await analyzeMedicine(text);
+        saveToHistory(res.correctedTerm || text);
         setResult(res);
       } else {
-        saveToHistory(text);
         const res = await analyzeSymptom(text);
+        saveToHistory(res.correctedTerm || text);
         setResult(res);
       }
     } catch (err) {
