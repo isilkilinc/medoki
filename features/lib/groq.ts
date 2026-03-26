@@ -21,7 +21,7 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
       max_tokens: maxTokens,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "You are a careful medical information assistant. Return only valid JSON, no markdown or code fences." },
+        { role: "system", content: "You are a Turkish Pharmacist who is highly familiar with local Turkish medication brand names. If you encounter a brand name you don't immediately recognize, you must check if it's a common Turkish medication (like Desmont, Arveles, Parol) and analyze its active ingredients (e.g., Montelukast for Desmont) before giving an answer. Do not just say 'Drug not found' if there's a close match in the local market. Return only valid JSON, no markdown or code fences." },
         { role: "user", content: userContent },
       ],
     }),
