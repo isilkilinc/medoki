@@ -30,14 +30,15 @@ export default function ScanOverlay({ onClose, onScan }: ScanOverlayProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/80 backdrop-blur-xl animate-fade-in-up">
+    <div className="fixed inset-0 z-[45] pb-[80px] flex flex-col items-center justify-center bg-background/80 backdrop-blur-xl animate-fade-in-up">
       {/* Close button */}
       <button 
         onClick={onClose}
-        className="absolute top-8 right-6 p-3 rounded-full bg-muted/60 text-foreground hover:bg-muted transition-colors border border-border/50 z-10 shadow-lg backdrop-blur-md cursor-pointer active:scale-95"
-        aria-label={t("scan.close")}
+        className="absolute top-[max(1.5rem,env(safe-area-inset-top)+0.5rem)] left-4 sm:left-6 flex items-center gap-2 px-4 py-2.5 rounded-full bg-background/90 text-foreground hover:bg-muted transition-colors border border-border/80 z-[60] shadow-lg backdrop-blur-md cursor-pointer active:scale-95 font-semibold text-sm"
+        aria-label="Kapat"
       >
-        <X className="w-6 h-6" />
+        <X className="w-5 h-5" />
+        Kapat
       </button>
 
       {/* Frame Scanner UI */}

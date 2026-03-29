@@ -21,7 +21,7 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
       max_tokens: maxTokens,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "You are a Turkish Pharmacist who is highly familiar with local Turkish medication brand names. If you encounter a brand name you don't immediately recognize, you must check if it's a common Turkish medication (like Desmont, Arveles, Parol) and analyze its active ingredients (e.g., Montelukast for Desmont) before giving an answer. Do not just say 'Drug not found' if there's a close match in the local market. Return only valid JSON, no markdown or code fences." },
+        { role: "system", content: "You are a highly skilled Turkish Pharmacist with deep knowledge of local Turkish brand names and their active ingredients. You MUST recognize and correctly map the following common Turkish brands to their active compounds: Parol/Calpol → Paracetamol, Arveles → Dexketoprofen, Majezik → Flurbiprofen, Dolven/Ibufen/Nurofen → Ibuprofen, Augmentin → Amoxicillin/Clavulanate, Desmont → Montelukast, Buscopan → Hyoscine, Dikloron → Diclofenac, Voltaren → Diclofenac, Cipro → Ciprofloxacin, Xanax → Alprazolam. Treat vitamins and supplements (Magnesium, Vitamin D, Omega-3) with the same rigor as drugs. Recognize pediatric brands (Calpol, Dolven, Ibufen). ALWAYS format the correctedTerm field as: 'BrandName (ActiveIngredient)' — e.g. 'Calpol (Parasetamol)', 'Augmentin (Amoksisilin/Klavulanat)'. Return only valid JSON, no markdown or code fences." },
         { role: "user", content: userContent },
       ],
     }),
@@ -59,6 +59,7 @@ export interface MedicineResult {
   dosage: string;
   sideEffects: string[];
   warnings: string[];
+  sensitivityWarnings: string[];
   summary: string;
   disclaimer: string;
   userExperiences: string[];
@@ -103,6 +104,7 @@ JSON şeması:
   "dosage": "string",
   "sideEffects": ["string", "string", "string"],
   "warnings": ["string", "string", "string"],
+  "sensitivityWarnings": ["string", "string"],
   "summary": "string",
   "disclaimer": "string",
   "userExperiences": ["string", "string", "string"]
@@ -110,11 +112,14 @@ JSON şeması:
 
 Kurallar:
 - Dil: Türkçe.
-- ÖNEMLİ: Kullanıcının girdiği metindeki bariz yazım hatalarını veya argoları (örn. "reg" -> "regl") otomatik olarak doğru ve profesyonel tıbbi terime çevir.
-- Sonucun özetini (summary) ve tüm açıklamalarını mutlaka bu düzeltilmiş, profesyonel tıbbi terimi kullanarak oluştur.
-- Bilimsel doğruluk öncelikli, ama sade ve anlaşılır yaz.
+- ÖNEMLİ: correctedTerm alanına mutlaka 'Marka Adı (Etken Madde)' formatında yaz. Örneğin: 'Calpol (Parasetamol)', 'Arveles (Deksketoprofen)', 'Augmentin (Amoksisilin/Klavulanat)'. Eğer ticari marka yoksa sadece bilimsel adı yaz.
+- Kullanıcının girdiği metindeki bariz yazım hatalarını veya argoları otomatik olarak doğru tıbbi terime çevir.
+- Summary ve diğer açıklamalarda marka adını kullanarak kullanıcı dostu yaz; teknik detaylar parantez içinde veya notlarda yer alabilir.
+- Bilimsel doğruluk öncelikli, ama sade ve anlaşılır yaz. İlaç pediatrik ise (örn. Calpol, Dolven, Ibufen), summary alanına mutlaka net bir hatırlatma ekle: 'Pediatrik dozlar çocuğun kilosuna göre doktor tarafından belirlenmelidir.'
+- Eğer sorgulanan ürün bir vitamin veya takviye ise (örn. Magnezyum, D Vitamini, Omega-3), summary alanına mutlaka şu notu ekle: 'Takviyeler dengeli bir beslenmenin yerine geçmez ve gözetim altında kullanılmalıdır.'
 - Emin olmadığın bilgi varsa "Prospektüste doğrulayın" gibi net uyarı ekle.
 - Reçete önerme; sadece genel bilgilendirme yap.
+- sensitivityWarnings: İlacın içeriğindeki yaygın alerjenleri (Gluten, Laktoz, Nişasta, Yapay Boyalar) ve hayvansal kaynaklı içerikleri (domuz/sığır enzimleri, jelatin vb.) vegan/vejetaryenler için tara. Bulursan her birini en başa '⚠️' emojisi koyarak kısa bir açıklamayla yaz. Bulamazsan boş liste dön.
 - userExperiences: İnternet forumları ve kullanıcı yorumlarında bu ilaçla ilişkilendirilen yaygın temaları 3 kısa maddeyle özetle.`.trim();
 
   const parsed = await groqJsonCompletion(prompt, 1100);
@@ -125,6 +130,7 @@ Kurallar:
     dosage: parsed.dosage || "Bilgi alınamadı.",
     sideEffects: Array.isArray(parsed.sideEffects) && parsed.sideEffects.length ? parsed.sideEffects : ["Bilgi alınamadı."],
     warnings: Array.isArray(parsed.warnings) && parsed.warnings.length ? parsed.warnings : ["Bilgi alınamadı."],
+    sensitivityWarnings: Array.isArray(parsed.sensitivityWarnings) ? parsed.sensitivityWarnings : [],
     summary: parsed.summary || "Bilgi alınamadı.",
     disclaimer: parsed.disclaimer || "Bu çıktı genel bilgilendirme içindir; doktor veya eczacı önerisinin yerine geçmez.",
     userExperiences: normalizeUserExperiences(parsed.userExperiences),
@@ -227,7 +233,7 @@ Yalnızca geçerli JSON döndür:
   "suggestion": "Eğer isTypo true ise ve %100 eminsen, en doğru profesyonel tıbbi terim/ilaç adı. Aksi halde null"
 }
 Kurallar:
-1. Girdi kelime, zaten doğru ve mantıklı bir tıbbi terim veya ilaç adıysa (Örn: Majezik, Parol, Baş ağrısı), kesinlikle isValid: true ve isTypo: false dön, suggestion null olsun.
+1. Girdi kelime, zaten doğru ve mantıklı bir tıbbi terim, ilaç veya takviye adıysa (Örn: Majezik, Parol, Baş ağrısı, Calpol, Dolven, Ibufen, Magnezyum, D Vitamini, Omega-3), kesinlikle isValid: true ve isTypo: false dön, suggestion null olsun.
 2. Yazım hatası veya argo varsa (Örn: "Macezik" -> "Majezik", "reg aris" veya "reg" -> "Regl Ağrısı", "başş" -> "Baş Ağrısı"), isValid: false, isTypo: true dön. BURASI ÇOK ÖNEMLİ: Yalnızca, düzelttiğin kelime tıp literatüründe kesin ve profesyonel bir terimse suggestion alanını doldur.
 3. Asla uydurma, anlamsız kelimeler veya birbiriyle alakasız derme çatma tamlamalar (Örn: "Reg Aferi") üretme. %100 emin olmadığın tıbbi veya ilaç adları için suggestion: null yap ve isTypo: false yap.
 4. Girdi tamamen anlamsızsa (örn: "asdfg") veya tıbbi veya ilaç karşılığı yoksa, uydurma üretme (isValid: false, isTypo: false, suggestion: null).`;

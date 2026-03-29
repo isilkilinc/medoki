@@ -79,14 +79,28 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
 
     if (mode === "medicine") {
       const r = result as MedicineResult;
-      const cards = [
+      const cards: Array<{ title: string; content: React.ReactNode; muted?: boolean }> = [
         { title: "Ne İşe Yarar?", content: <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.purpose}</p> },
         { title: "Önerilen Doz", content: <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.dosage}</p> },
         { title: "Sık Görülen Yan Etkiler", content: <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{r.sideEffects.map((s, i) => <li key={i}>{s}</li>)}</ul> },
         { title: "Kritik Uyarılar", content: <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{r.warnings.map((s, i) => <li key={i}>{s}</li>)}</ul> },
-        { title: "Sade Özet", content: <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.summary}</p> },
-        { title: "Tıbbi Not", content: <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.disclaimer}</p>, muted: true },
       ];
+
+      if (r.sensitivityWarnings && r.sensitivityWarnings.length > 0) {
+        cards.push({
+          title: "Hassasiyet ve İçerik Uyarıları",
+          content: (
+            <div className="text-foreground/80 grid gap-2.5 text-sm font-medium">
+              {r.sensitivityWarnings.map((s, i) => (
+                <p key={i} className="m-0 leading-relaxed">{s}</p>
+              ))}
+            </div>
+          )
+        });
+      }
+
+      cards.push({ title: "Sade Özet", content: <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.summary}</p> });
+      cards.push({ title: "Tıbbi Not", content: <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.disclaimer}</p>, muted: true });
 
       return (
         <>
@@ -186,7 +200,7 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
       <div className="flex flex-col gap-3 mb-4">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-base font-bold text-foreground flex-1 min-w-0 m-0">
-            {query}
+            {result ? (result as MedicineResult | SymptomResult).correctedTerm || query : query}
           </h2>
           <button
             type="button"

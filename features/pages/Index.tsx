@@ -131,6 +131,7 @@ const Index = () => {
   };
 
   const handleTabChange = (tab: TabType) => {
+    setShowScan(false);
     if (tab === "home" && activeTab === "home") {
       handleBack();
     }
