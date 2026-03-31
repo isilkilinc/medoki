@@ -9,6 +9,7 @@ Medoki; prospektüsleri saniyeler içinde halkın anlayacağı temizlikte özetl
 ## 🔗 Canlı Demo & Video
 - **Yayın Linki:** https://medoki.vercel.app/
 - **Demo Video (2-3 dk):** [Buraya Loom/YouTube Linkini Yapıştır]
+- **Kullanıcı Anketi:** https://forms.gle/UgGh92znGnwLwtBw8
 
 ## 🛠️ Kullanılan Teknolojiler
 - **AI Engine:** Groq AI API & Gemini (Prompt Engineering)
