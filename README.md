@@ -8,7 +8,7 @@ Medoki; prospektüsleri saniyeler içinde halkın anlayacağı temizlikte özetl
 
 ## 🔗 Canlı Demo & Video
 - **Yayın Linki:** https://medoki.vercel.app/
-- **Demo Video (2-3 dk):** [Buraya Loom/YouTube Linkini Yapıştır]
+- **Demo Sunumu:** https://youtu.be/UtDhIPIrBqI
 - **Kullanıcı Anketi:** https://forms.gle/UgGh92znGnwLwtBw8
 
 ## 🛠️ Kullanılan Teknolojiler
