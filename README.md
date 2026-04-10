@@ -4,7 +4,7 @@
 Sıklıkla tıbbi dilden dolayı kafa karıştıran uzun ilaç prospektüslerini ve basit semptom/rahatsızlık ihtiyaçlarını anlamak, halkın genel sağlığı için büyük bir engel teşkil etmektedir. Özellikle ilaç içeriklerindeki gizli alerjenler ve diyet kısıtlamalarına (vegan, helal vb.) yönelik bilgiye ulaşmak oldukça zordur.
 
 ## 🚀 Çözüm
-Medoki; prospektüsleri saniyeler içinde halkın anlayacağı temizlikte özetleyen, otonom ve modern bir sağlık asistanıdır. Yapay zeka motoru sayesinde ilaçların sadece özetini çıkarmakla kalmaz, içerikteki hassas maddeleri ve alerjenleri saniyeler içinde analiz ederek kullanıcıya özel uyarılar sunar.
+Medoki; prospektüsleri saniyeler içinde halkın anlayacağı temizlikte özetleyen ve semptom analizi yaparak kullanıcıyı en doğru reçetesiz (OTC) çözümlere yönlendiren otonom ve modern bir sağlık asistanıdır. Yapay zeka motoru sayesinde ilaçların sadece özetini çıkarmakla kalmaz, içerikteki hassas maddeleri ve alerjenleri saniyeler içinde analiz ederek kullanıcıya özel uyarılar sunar. Üstelik bunları yaparken kullanıcı analizlerine de yer vererek, topluluğun gerçek deneyimlerini güvenilir bir referans noktasına dönüştürür.
 
 ## 🔗 Canlı Demo & Video
 - **Yayın Linki:** https://medoki.vercel.app/
