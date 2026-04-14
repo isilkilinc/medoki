@@ -11,7 +11,13 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-export const supabase = createClient(SUPABASE_URL || "", SUPABASE_ANON_KEY || "");
+// URL boş olunca createClient anında hata fırlatıp tüm web sitesini (siyah ekrana) çökertiyordu.
+// Eğer ortam değişkeni henüz Vercel'e eklenmemişse uygulamanın çökmemesi için geçici bir dummy URL veriyoruz.
+// Fonksiyonların içindeki (!SUPABASE_URL) kontrolü sayesinde bu dummy URL'ye hiçbir zaman istek atılmayacak.
+export const supabase = createClient(
+  SUPABASE_URL || "https://dummy.supabase.co", 
+  SUPABASE_ANON_KEY || "dummy"
+);
 
 // ─── Tablo sabiti ─────────────────────────────────────────────────────────────
 const TABLE = "cached_analyses";
