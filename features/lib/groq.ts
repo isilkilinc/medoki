@@ -109,6 +109,77 @@ export interface SymptomResult {
   userExperiences: string[];
 }
 
+// ─── PharmacyGuard: Tıbbi Doğruluk ve Form Kontrolü ──────────────────────────
+const FORBIDDEN_FORMS_BY_SYMPTOM: Record<string, string[]> = {
+  "baş ağrısı": ["krem", "jel", "fısfıs", "sprey", "bant"],
+  "ateş": ["krem", "jel", "bant"],
+  "mide": ["jel", "krem"],
+  "göz": ["tablet", "kapsül"],
+};
+
+const BRAND_FORM_DEFAULTS: Record<string, string> = {
+  "majezik": "Tablet",
+  "arveles": "Tablet",
+  "dikloron": "Tablet",
+  "voltaren": "Tablet",
+  "parol": "Tablet",
+  "aprol": "Tablet",
+  "calpol": "Şurup",
+  "dolven": "Şurup",
+  "advantan": "Krem",
+};
+
+/**
+ * İlaç formunu ve kullanım şeklini semptoma ve ilaca göre normalize eder.
+ * AI sanrılarını (hallucinations) temizler ve tıbbi mantık sağlar.
+ */
+function applyPharmacyGuard(product: SymptomProduct, symptom: string): SymptomProduct {
+  const s = (symptom || "").toLowerCase();
+  let f = product.form || "";
+  let use = product.typicalUse || "";
+
+  // 1. Semptom-Form Uyumluluğu (Örn: Baş ağrısı için krem yasak)
+  for (const [key, forbidden] of Object.entries(FORBIDDEN_FORMS_BY_SYMPTOM)) {
+    if (s.includes(key)) {
+      const isHallucinated = forbidden.some(fb => f.toLowerCase().includes(fb));
+      if (isHallucinated) {
+        // Eğer marka biliniyorsa onun varsayılan formuna, bilinmiyorsa Tablet'e çek
+        const knownBrand = product.brandExamples.find(b => BRAND_FORM_DEFAULTS[b.toLowerCase()]);
+        f = knownBrand ? BRAND_FORM_DEFAULTS[knownBrand.toLowerCase()] : "Tablet";
+      }
+    }
+  }
+
+  // 2. Marka Bazlı Zorunlu Form (Örn: Majezik = Tablet)
+  for (const brand in BRAND_FORM_DEFAULTS) {
+    if (product.brandExamples.some(b => b.toLowerCase().includes(brand.toLowerCase()))) {
+      // Eğer semptom sistemik bir etki gerektiriyorsa varsayılan formu kullan
+      if (s.includes("baş ağrısı") || s.includes("ateş") || s.includes("regl") || s.includes("diş")) {
+        f = BRAND_FORM_DEFAULTS[brand];
+      }
+    }
+  }
+
+  // 3. Kullanım Metni (Natural Language Fix)
+  const lowerF = f.toLowerCase();
+  if (lowerF.includes("tablet") || lowerF.includes("kapsül")) {
+    if (!use.toLowerCase().includes("tablet") && !use.toLowerCase().includes("yutulur")) {
+       use = "Günde 1-2 tablet, tok karnına bol su ile yutulur.";
+    }
+  } else if (lowerF.includes("krem") || lowerF.includes("jel")) {
+    if (!use.toLowerCase().includes("tabaka")) {
+       use = "Ağrılı bölgeye ince bir tabaka halinde, hafif masaj yaparak uygulanır.";
+    }
+  } else if (lowerF.includes("şurup")) {
+    if (!use.toLowerCase().includes("ölçek")) {
+       use = "Doktorun önerdiği ölçekte, tok karnına ağız yoluyla alınır.";
+    }
+  }
+
+  return { ...product, form: f, typicalUse: use };
+}
+
+
 function symptomProductHeadline(p: { activeIngredient: string; brandExamples: string[]; name?: string }) {
   const ingredient = (p.activeIngredient || p.name || "").trim() || "—";
   const brands = p.brandExamples.filter(Boolean);
@@ -146,7 +217,8 @@ JSON şeması:
 
 Kurallar:
 - Dil: Türkçe.
-- İlaçların formlarını (Tablet, Krem, Şurup, Sprey, vb.) ve kullanım şekillerini piyasadaki gerçek halleriyle %100 uyumlu olacak şekilde ver. Örneğin, 'Majezik' gibi sistemik ağrı kesiciler için varsayılan formu krem değil 'Tablet' olarak ele al ve kullanım dozunu buna göre (ağızdan) öner.
+- İlaçların formlarını (Tablet, Krem, Şurup, Sprey, vb.) ve kullanım şekillerini piyasadaki gerçek halleriyle %100 uyumlu olacak şekilde ver. Örneğin, 'Majezik' gibi sistemik ağrı kesiciler için varsayılan formu krem değil 'Tablet' olarak ele al.
+- Semptom-Form Uyumu: Kullanıcının şikayeti ile ilacın veriliş yolu (oral, topikal vb.) tıbbi olarak mantıklı bir bütün oluşturmalıdır. Baş ağrısı için krem/jel önerme.
 - ÖNEMLİ: correctedTerm alanında ilaç adının (ticari marka) EN YANINA parantez içinde ilacın ETKEN MADDESİNİ EKLE (örn: 'Majezik (Flurbiprofen)', 'Parol (Parasetamol)', 'Aferin (Parasetamol & Klorfeniramin)', 'Arveles (Deksketoprofen)'). Eğer vitaminse vb. 'D Vitamini (Kolekalsiferol)' şeklinde göster. Sadece ticari ad yazma, parantez içinde etken madde olması ZORUNLUDUR!
 - Kullanıcının girdiği metindeki bariz yazım hatalarını veya argoları otomatik olarak doğru tıbbi terime çevir.
 - Summary ve diğer açıklamalarda marka adını kullanarak kullanıcı dostu yaz; teknik detaylar parantez içinde veya notlarda yer alabilir.
@@ -320,10 +392,12 @@ Aşağıdaki JSON şemasına tam uygun şekilde yanıt ver. Yalnızca geçerli J
 
 Kurallar:
 - Dil: Türkçe.
+- Kullanıcının şikayeti ile ilacın veriliş yolu (oral, topikal, sprey vb.) tıbbi olarak mantıklı bir bütün oluşturmalıdır. Baş ağrısı için KESİNLİKLE krem/jel önerme (mümkünse tablet öner). Kas/eklem ağrılarında krem/jel öncelikli olabilir.
 - ÖNEMLİ: correctedTerm alanını KESİNLİKLE 'Aratılan Semptom (Semptomun Latince veya Akademik Tıbbi Karşılığı)' formatında döndür. Parantez içine ASLA bu semptoma sebep olabilecek hastalıkları (örn: Gastrit, Enfeksiyon, Migren) yazma; yalnızca şikayetin doğrudan tıbbi litaratürdeki adını (örn: 'Baş Ağrısı (Serebralji)', 'Mide Bulantısı (Nausea)', 'Ateş (Pireksi/Febris)', 'Boğaz Ağrısı (Farenjal Ağrı)') kullan. "intro" ve diğer açıklamalarda ise yalnızca Türkçe semptom adını kullan.
 - 3 ila 5 arası ürün öner.
 - Her products öğesinde activeIngredient ve brandExamples (en az 2 marka) zorunlu.
 - form alanı son derece net olsun ve önerilen ilaçların piyasadaki gerçek satış formlarıyla (örn: Majezik = Tablet) birebir eşleşmesini sağla. Hap/tablet olan bir ilaca uydurma şekilde 'Krem' veya 'Jel' yazmaktan KESİNLİKLE kaçın.
+- typicalUse metni doğal olsun: Tablet ise "günde x tablet", krem ise "ince bir tabaka halinde" gibi gerçekçi ifadeler kullan.
 - Hamilelik, kronik hastalık, çocuk, alerji gibi durumlarda mutlaka eczacı/doktor uyarısı yaz.
 - userExperiences: Bu semptom veya önerilen OTC ürünlerle ilgili internetteki kullanıcı yorumlarında geçen yaygın temaları 3 kısa maddeyle özetle.`.trim();
 
@@ -336,7 +410,7 @@ Kurallar:
     products: products.map((p: any) => {
       const activeIngredient = (p.activeIngredient || p.name || "").trim();
       const brandExamples = Array.isArray(p.brandExamples) ? p.brandExamples.map((b: string) => String(b).trim()).filter(Boolean) : [];
-      return {
+      const baseProduct = {
         activeIngredient,
         brandExamples,
         labelLine: symptomProductHeadline({ activeIngredient, brandExamples, name: p.name }),
@@ -345,6 +419,8 @@ Kurallar:
         typicalUse: p.typicalUse || "",
         cautions: Array.isArray(p.cautions) ? p.cautions : [],
       };
+      // PharmacyGuard ile tıbbi mantık kontrolü ve form düzeltmesi yap
+      return applyPharmacyGuard(baseProduct, userText);
     }),
     generalTips: Array.isArray(parsed.generalTips) && parsed.generalTips.length ? parsed.generalTips : ["Genel öneri alınamadı; eczacınıza danışın."],
     whenToSeeDoctor: Array.isArray(parsed.whenToSeeDoctor) && parsed.whenToSeeDoctor.length ? parsed.whenToSeeDoctor : ["Belirtiler şiddetlenirse veya uzun sürerse doktora başvurun."],
