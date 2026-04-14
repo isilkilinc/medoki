@@ -323,7 +323,7 @@ Kurallar:
 - ÖNEMLİ: correctedTerm alanını KESİNLİKLE 'Aratılan Semptom (Semptomun Latince veya Akademik Tıbbi Karşılığı)' formatında döndür. Parantez içine ASLA bu semptoma sebep olabilecek hastalıkları (örn: Gastrit, Enfeksiyon, Migren) yazma; yalnızca şikayetin doğrudan tıbbi litaratürdeki adını (örn: 'Baş Ağrısı (Serebralji)', 'Mide Bulantısı (Nausea)', 'Ateş (Pireksi/Febris)', 'Boğaz Ağrısı (Farenjal Ağrı)') kullan. "intro" ve diğer açıklamalarda ise yalnızca Türkçe semptom adını kullan.
 - 3 ila 5 arası ürün öner.
 - Her products öğesinde activeIngredient ve brandExamples (en az 2 marka) zorunlu.
-- form alanı net olsun: "Tablet", "Jel", "Krem", "Sprey", "Şurup", "Pastil", "Bant" vb.
+- form alanı son derece net olsun ve önerilen ilaçların piyasadaki gerçek satış formlarıyla (örn: Majezik = Tablet) birebir eşleşmesini sağla. Hap/tablet olan bir ilaca uydurma şekilde 'Krem' veya 'Jel' yazmaktan KESİNLİKLE kaçın.
 - Hamilelik, kronik hastalık, çocuk, alerji gibi durumlarda mutlaka eczacı/doktor uyarısı yaz.
 - userExperiences: Bu semptom veya önerilen OTC ürünlerle ilgili internetteki kullanıcı yorumlarında geçen yaygın temaları 3 kısa maddeyle özetle.`.trim();
 
