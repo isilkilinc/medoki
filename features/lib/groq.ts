@@ -124,7 +124,7 @@ JSON şeması:
 
 Kurallar:
 - Dil: Türkçe.
-- ÖNEMLİ: correctedTerm alanına mutlaka 'Marka Adı (Etken Madde)' formatında yaz. Örneğin: 'Calpol (Parasetamol)', 'Arveles (Deksketoprofen)', 'Augmentin (Amoksisilin/Klavulanat)'. Eğer ticari marka yoksa sadece bilimsel adı yaz.
+- ÖNEMLİ: correctedTerm alanına YALNIZCA ilacın marka veya ticari adını yaz (örn: 'Calpol', 'Arveles', 'Parol'). İlaç etken maddelerini başlığa (correctedTerm) ASLA ekleme. Etken maddeleri ve içerik detaylarını sadece 'summary' (açıklama) alanında, metin içine yedirerek belirt.
 - Kullanıcının girdiği metindeki bariz yazım hatalarını veya argoları otomatik olarak doğru tıbbi terime çevir.
 - Summary ve diğer açıklamalarda marka adını kullanarak kullanıcı dostu yaz; teknik detaylar parantez içinde veya notlarda yer alabilir.
 - Bilimsel doğruluk öncelikli, ama sade ve anlaşılır yaz. İlaç pediatrik ise (örn. Calpol, Dolven, Ibufen), summary alanına mutlaka net bir hatırlatma ekle: 'Pediatrik dozlar çocuğun kilosuna göre doktor tarafından belirlenmelidir.'
@@ -337,7 +337,7 @@ Aşağıdaki JSON şemasına tam uygun şekilde yanıt ver. Yalnızca geçerli J
 
 Kurallar:
 - Dil: Türkçe.
-- ÖNEMLİ: correctedTerm alanına mutlaka kullanılan profesyonel tıbbi terimi düzgün başlık formatında yaz (örn. "Baş Ağrısı", "Mide Bulantısı"). "intro" ve diğer açıklamalarda bu terimi kullan.
+- ÖNEMLİ: correctedTerm alanını KESİNLİKLE 'Aratılan Semptom (Tıbbi Karşılığı)' formatında döndür. Örneğin: 'Baş Ağrısı (Serebralji)', 'Mide Bulantısı (Nausea)'. "intro" ve diğer açıklamalarda ise yalnızca Türkçe semptom adını kullan.
 - 3 ila 5 arası ürün öner.
 - Her products öğesinde activeIngredient ve brandExamples (en az 2 marka) zorunlu.
 - form alanı net olsun: "Tablet", "Jel", "Krem", "Sprey", "Şurup", "Pastil", "Bant" vb.
