@@ -231,14 +231,18 @@ Kurallar:
 
   const parsed = await groqJsonCompletion(prompt, 1100);
 
+  const correctedTerm = parsed.correctedTerm || userText;
+  const purpose = parsed.purpose || "Bilgi alınamadı.";
+  const dosage = parsed.dosage || "Bilgi alınamadı.";
+
   const result: MedicineResult = {
-    correctedTerm: parsed.correctedTerm || userText,
-    purpose: parsed.purpose || "Bilgi alınamadı.",
-    dosage: parsed.dosage || "Bilgi alınamadı.",
+    correctedTerm,
+    purpose,
+    dosage,
     sideEffects: Array.isArray(parsed.sideEffects) && parsed.sideEffects.length ? parsed.sideEffects : ["Bilgi alınamadı."],
     warnings: Array.isArray(parsed.warnings) && parsed.warnings.length ? parsed.warnings : ["Bilgi alınamadı."],
     sensitivityWarnings: Array.isArray(parsed.sensitivityWarnings) ? parsed.sensitivityWarnings : [],
-    summary: parsed.summary || "Bilgi alınamadı.",
+    summary: parsed.summary || `${correctedTerm} için hazırlanan analizde, ilacın ${purpose.toLowerCase()} amacıyla kullanıldığı ve genel olarak ${dosage.toLowerCase()} şeklinde önerildiği belirlenmiştir.`,
     disclaimer: parsed.disclaimer || "Bu çıktı genel bilgilendirme içindir; doktor veya eczacı önerisinin yerine geçmez.",
     userExperiences: normalizeUserExperiences(parsed.userExperiences),
   };
@@ -404,9 +408,10 @@ Kurallar:
   const parsed = await groqJsonCompletion(prompt, 1600);
   const products = Array.isArray(parsed.products) ? parsed.products : [];
 
+  const correctedTerm = parsed.correctedTerm || userText;
   const result: SymptomResult = {
-    correctedTerm: parsed.correctedTerm || userText,
-    intro: parsed.intro || "Bilgi alınamadı.",
+    correctedTerm,
+    intro: parsed.intro || `${correctedTerm} şikayeti için değerlendirme sonuçları ve öneriler aşağıda listelenmiştir.`,
     products: products.map((p: any) => {
       const activeIngredient = (p.activeIngredient || p.name || "").trim();
       const brandExamples = Array.isArray(p.brandExamples) ? p.brandExamples.map((b: string) => String(b).trim()).filter(Boolean) : [];

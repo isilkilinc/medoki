@@ -100,11 +100,11 @@ const Index = () => {
       localStorage.setItem("medoki_guest_tries", (tries + 1).toString());
     }
 
-    setMode(selectedMode);
-    setQuery(text);
-    setResult(null);
     setError(null);
+    setResult(null);
     setIsLoading(true);
+    setQuery(text);
+    setMode(selectedMode);
     setScreen("results");
 
     try {
@@ -129,12 +129,13 @@ const Index = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setActiveTab("home");
-                    setScreen("home");
                     setError(null);
                     setResult(null);
-                    // Semptom sekmesini açıp analizi otomatik başlat
-                    handleAnalyze(text, "symptom");
+                    setMode("symptom");
+                    setActiveTab("home");
+                    setScreen("home");
+                    // Semptom sekmesini açıp analizi yeni kelimeyle başlat
+                    setTimeout(() => handleAnalyze(text, "symptom"), 50);
                   }}
                   className="font-bold underline cursor-pointer hover:text-emerald-400 transition-colors"
                 >
@@ -158,9 +159,11 @@ const Index = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const text = validation.suggestion!;
-                      setForceSearchInput(text);
-                      handleAnalyze(text, "medicine");
+                      const suggestion = validation.suggestion!;
+                      setForceSearchInput(suggestion);
+                      setError(null);
+                      setResult(null);
+                      handleAnalyze(suggestion, "medicine");
                     }}
                     className="font-bold underline cursor-pointer hover:text-emerald-400 transition-colors"
                   >
