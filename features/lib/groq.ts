@@ -39,6 +39,28 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
   return JSON.parse(stripCodeFences(rawText).trim());
 }
 
+/**
+ * AI'nin hafızasında kalan veya hatalı uydurulan eş anlamlıları (örn: Majezik -> Flurbiprofen)
+ * yazım hatası (typo) sanmasını engeller. Yalnızca harf dizilimi birbirine benzeyen gerçek
+ * klavye hatalarına izin verir.
+ */
+function isLegitTypo(input: string, suggestion: string): boolean {
+  if (!input || !suggestion) return false;
+  const i = input.trim().toLowerCase();
+  const s = suggestion.trim().toLowerCase();
+  if (i === s) return false;
+  
+  // Uzunluk farkı çok fazlaysa bu bir yazım hatası olamaz (eş anlamlıdır)
+  if (Math.abs(i.length - s.length) > 4) return false;
+  
+  // İlk harf tamamen farklıysa büyük ihtimalle eş anlamlı önermesidir (Arveles vs Dexketoprofen)
+  const exceptions = ["c","ç","s","ş","g","ğ","o","ö","u","ü","i","ı"];
+  if (i[0] !== s[0] && !exceptions.includes(i[0])) {
+    return false;
+  }
+  return true;
+}
+
 export function normalizeUserExperiences(raw: unknown): string[] {
   const list = Array.isArray(raw) ? raw.map((s) => String(s).trim()).filter(Boolean) : [];
   const fallbacks = [
@@ -357,7 +379,10 @@ JSON şeması:
 }`;
   try {
     const parsed = await groqJsonCompletion(prompt, 50);
-    const result = parsed.suggestion || null;
+    let result = parsed.suggestion || null;
+    if (result && !isLegitTypo(userText, result)) {
+      result = null; // AI marka adı ile etken maddeyi karıştırmış, reddet.
+    }
     void setCachedAnalysis(cacheKey, result);
     return result;
   } catch {
@@ -443,6 +468,15 @@ suggestion:
       isSymptom: parsed.isSymptom === true,
       suggestion: parsed.suggestion || null,
     };
+
+    if (result.isTypo && result.suggestion && !isLegitTypo(userText, result.suggestion)) {
+      // AI marka/etken maddeyi birbirine dönüştürmeye çalışmış
+      result.isTypo = false;
+      result.suggestion = null;
+      // Zaten birini diğerine çevirmeye çalıştıysa girdi tıbbi olarak geçerlidir.
+      result.isValid = true;
+    }
+
     void setCachedAnalysis(cacheKey, result);
     return result;
   } catch {
