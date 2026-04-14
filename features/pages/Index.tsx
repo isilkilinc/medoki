@@ -121,9 +121,9 @@ const Index = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      setActiveTab("home");
-                      setForceSearchInput(validation.suggestion!);
-                      setError(null);
+                      const text = validation.suggestion!;
+                      setForceSearchInput(text);
+                      handleAnalyze(text, "medicine");
                     }}
                     className="font-bold underline cursor-pointer hover:text-emerald-400 transition-colors"
                   >

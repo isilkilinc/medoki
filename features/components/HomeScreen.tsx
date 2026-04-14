@@ -31,9 +31,10 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
 
   const handleSuggestionClick = () => {
     if (!suggestion) return;
-    setInput(suggestion);
+    const textToAnalyze = suggestion;
+    setInput(textToAnalyze);
     setSuggestion(null);
-    // Submit butonuna basılana kadar bekle, otomatik analiz ETME.
+    onAnalyze(textToAnalyze, mode);
   };
 
   useEffect(() => {
