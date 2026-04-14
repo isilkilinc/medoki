@@ -77,15 +77,15 @@ export default function Login() {
 
       <div className="w-full max-w-sm flex flex-col animate-fade-in-up">
         {/* Logo/Başlık Alanı */}
-        <div className="flex flex-col items-center gap-4 mb-8">
-          <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-primary to-blue-500 flex items-center justify-center shadow-lg shadow-primary/20 p-3">
-             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-8 h-8 text-white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-             </svg>
-          </div>
+        <div className="flex flex-col items-center mb-10">
+          <img 
+            src="/logo.png" 
+            alt="Medoki Logo" 
+            className="w-auto h-[120px] object-contain relative z-10 drop-shadow-[0_0_12px_rgba(52,211,153,0.6)] mb-3" 
+          />
           <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight">Medoki Auth</h1>
-            <p className="text-sm text-muted-foreground mt-1">Akıllı Sağlık Rehberiniz</p>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Medoki</h1>
+            <p className="text-xs font-semibold text-primary/80 tracking-widest uppercase mt-1">Akıllı Sağlık Rehberiniz</p>
           </div>
         </div>
 
