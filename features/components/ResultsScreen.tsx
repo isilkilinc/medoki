@@ -134,6 +134,7 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
     // Symptom mode
     const r = result as SymptomResult;
     let cardIndex = 0;
+    const isRedFlag = r.intro?.includes("KRİTİK UYARI");
 
     return (
       <>
@@ -149,44 +150,48 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
           <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.intro}</p>
         </ResultCard>
 
-        <ResultCard title="Önerilen Reçetesiz Çözümler" className="animate-fade-in-up" style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}>
-          <p className="text-xs text-muted-foreground m-0">
-            Aşağıdakiler genel bilgilendirme içindir; eczacı veya doktor onayı olmadan kullanmayın.
-          </p>
-        </ResultCard>
+        {!isRedFlag && (
+          <>
+            <ResultCard title="Önerilen Reçetesiz Çözümler" className="animate-fade-in-up" style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}>
+              <p className="text-xs text-muted-foreground m-0">
+                Aşağıdakiler genel bilgilendirme içindir; eczacı veya doktor onayı olmadan kullanmayın.
+              </p>
+            </ResultCard>
 
-        {r.products.map((p, i) => (
-          <ResultCard
-            key={i}
-            title={p.labelLine}
-            className="animate-fade-in-up"
-            style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}
-          >
-            {p.form && <p className="text-xs text-muted-foreground mb-2">{p.form}</p>}
-            <p className="text-foreground/75 leading-relaxed m-0 text-sm"><strong className="font-bold text-foreground">Neden uygun:</strong> {p.whyItHelps || "—"}</p>
-            <p className="text-foreground/75 leading-relaxed m-0 mt-1 text-sm"><strong className="font-bold text-foreground">Tipik kullanım:</strong> {p.typicalUse || "Prospektüs veya eczacıya danışın."}</p>
-            {p.cautions.length > 0 && (
-              <>
-                <p className="text-foreground/75 leading-relaxed m-0 mt-1 text-sm"><strong className="font-bold text-foreground">Dikkat:</strong></p>
-                <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{p.cautions.map((c, j) => <li key={j}>{c}</li>)}</ul>
-              </>
-            )}
-          </ResultCard>
-        ))}
+            {r.products.map((p, i) => (
+              <ResultCard
+                key={i}
+                title={p.labelLine}
+                className="animate-fade-in-up"
+                style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}
+              >
+                {p.form && <p className="text-xs text-muted-foreground mb-2">{p.form}</p>}
+                <p className="text-foreground/75 leading-relaxed m-0 text-sm"><strong className="font-bold text-foreground">Neden uygun:</strong> {p.whyItHelps || "—"}</p>
+                <p className="text-foreground/75 leading-relaxed m-0 mt-1 text-sm"><strong className="font-bold text-foreground">Tipik kullanım:</strong> {p.typicalUse || "Prospektüs veya eczacıya danışın."}</p>
+                {p.cautions.length > 0 && (
+                  <>
+                    <p className="text-foreground/75 leading-relaxed m-0 mt-1 text-sm"><strong className="font-bold text-foreground">Dikkat:</strong></p>
+                    <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{p.cautions.map((c, j) => <li key={j}>{c}</li>)}</ul>
+                  </>
+                )}
+              </ResultCard>
+            ))}
 
-        <ResultCard title="Genel Öneriler" className="animate-fade-in-up" style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}>
-          <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{r.generalTips.map((t, i) => <li key={i}>{t}</li>)}</ul>
-        </ResultCard>
+            <ResultCard title="Genel Öneriler" className="animate-fade-in-up" style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}>
+              <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{r.generalTips.map((t, i) => <li key={i}>{t}</li>)}</ul>
+            </ResultCard>
 
-        <ResultCard title="Ne Zaman Doktora Başvurmalı?" className="animate-fade-in-up" style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}>
-          <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{r.whenToSeeDoctor.map((t, i) => <li key={i}>{t}</li>)}</ul>
-        </ResultCard>
+            <ResultCard title="Ne Zaman Doktora Başvurmalı?" className="animate-fade-in-up" style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}>
+              <ul className="list-disc pl-5 text-foreground/75 grid gap-1.5 text-sm">{r.whenToSeeDoctor.map((t, i) => <li key={i}>{t}</li>)}</ul>
+            </ResultCard>
+          </>
+        )}
 
         <ResultCard title="Tıbbi Not" muted className="animate-fade-in-up" style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}>
           <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.disclaimer}</p>
         </ResultCard>
 
-        {!(r.intro?.includes("KRİTİK UYARI") && (!r.userExperiences || r.userExperiences.length === 0)) && (
+        {!isRedFlag && r.userExperiences && r.userExperiences.length > 0 && (
           <UserExperiencesCard
             items={r.userExperiences}
             style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}

@@ -194,6 +194,7 @@ Kurallar — SADECE BİRİ UYGULANIR:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    - Girdi tamamen anlamsız, rastgele karakter dizisi ("dsfgsdg", "asdfg", "xjqpw" vb.) ise.
    - Girdi uydurma kelime tiplemeleri içeriyorsa.
+   - Girdi LABORATUVAR veya KAN DEĞERİ ise (örn: "TSH", "WBC", "Hemoglobin", "B12 seviyesi", "Kolesterol"). Laboratuvar sonuçları kesinlikle 'semptom' değildir, DİREKT error dön.
    - Girdi birden fazla yazım hatası barındırıyorsa, okuması zorsa, klavye kayması çok fazlaysa (örn: "bqz ağrısı", "mğde agrıs") veya hangi kelimeyi kastettiğinden %100 emin değilsen. (Bunu mu demek istediniz ÖNERİSİ YAPMA YASAKTIR, DİREKT error DÖN).
    - stage: "error", correctedTerm: null.
 `;
@@ -409,7 +410,7 @@ Kullanıcı şu metni girdi: "${userText}"
               boğaz ağrısı, burun akıntısı, ishal, kabızlık, baş dönmesi, vb.
               KURAL: Girdi bir semptom/şikayet ise isSymptom: true, isValid: false, isTypo: false, suggestion: null döndür.
 
-"invalid"  → Tamamen anlamsız, rastgele karakter dizisi (örn: "asdfg", "vzka skaa").
+"invalid"  → Tamamen anlamsız, rastgele karakter dizisi (örn: "asdfg", "vzka skaa") veya LABORATUVAR/KAN DEĞERİ (örn: "TSH", "Hemoglobin", "WBC"). Bunlar ilaç/takviye değildir.
 
 ━━━ Diğer alanlar ━━━
 
