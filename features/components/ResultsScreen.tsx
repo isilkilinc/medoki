@@ -186,10 +186,12 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
           <p className="text-foreground/75 leading-relaxed m-0 text-sm">{r.disclaimer}</p>
         </ResultCard>
 
-        <UserExperiencesCard
-          items={r.userExperiences}
-          style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}
-        />
+        {!(r.intro?.includes("KRİTİK UYARI") && (!r.userExperiences || r.userExperiences.length === 0)) && (
+          <UserExperiencesCard
+            items={r.userExperiences}
+            style={{ animationDelay: `${cardIndex++ * STAGGER_STEP}ms` }}
+          />
+        )}
       </>
     );
   };
