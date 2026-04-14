@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AmbientBackground from "@/components/AmbientBackground";
 import HomeScreen from "@/components/HomeScreen";
 import ResultsScreen from "@/components/ResultsScreen";
@@ -12,6 +12,10 @@ import { analyzeMedicine, analyzeSymptom, validateMedicine, validateSymptom } fr
 import type { MedicineResult, SymptomResult } from "@/lib/groq";
 import { useLanguage } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
+import { LogIn, LogOut, Loader2 } from "lucide-react";
 
 type Screen = "home" | "results";
 type Mode = "medicine" | "symptom";
@@ -28,30 +32,54 @@ const Index = () => {
   const [result, setResult] = useState<MedicineResult | SymptomResult | null>(null);
   const [error, setError] = useState<ReactNode | null>(null);
   const [forceSearchInput, setForceSearchInput] = useState<string | null>(null);
+  const { user, signOut, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
+
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("medoki_recent_searches_v2");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          const cleanHistory = parsed.filter((item: string) => !/macezik|medacasol/i.test(item));
-          if (cleanHistory.length !== parsed.length) {
-            localStorage.setItem("medoki_recent_searches_v2", JSON.stringify(cleanHistory.length ? cleanHistory : ["Parol", "Arveles", "Majezik"]));
-          }
-          return cleanHistory.length ? cleanHistory : ["Parol", "Arveles", "Majezik"];
+          return parsed.slice(0, 5);
         } catch {}
       }
     }
     return ["Parol", "Arveles", "Majezik"];
   });
 
-  const saveToHistory = (term: string) => {
+
+  
+  useEffect(() => {
+    if (user) {
+      supabase.from("user_search_history")
+        .select("search_term")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(10)
+        .then(({ data }) => {
+           if (data) {
+              const terms = data.map((d: any) => d.search_term);
+              const unique = Array.from(new Set(terms)).slice(0, 5);
+              if (unique.length > 0) setRecentSearches(unique as string[]);
+           }
+        });
+    }
+  }, [user]);
+
+  const saveToHistory = async (term: string) => {
     setRecentSearches(prev => {
       const filtered = prev.filter(item => item.toLowerCase() !== term.toLowerCase());
       const updated = [term, ...filtered].slice(0, 5);
       localStorage.setItem("medoki_recent_searches_v2", JSON.stringify(updated));
       return updated;
     });
+    
+    if (user) {
+       await supabase.from("user_search_history").insert([
+         { user_id: user.id, search_term: term, search_type: mode }
+       ]);
+    }
   };
 
   const handleDeleteSearch = (term: string) => {
@@ -63,6 +91,15 @@ const Index = () => {
   };
 
   const handleAnalyze = async (text: string, selectedMode: Mode) => {
+    if (!user) {
+      const tries = parseInt(localStorage.getItem("medoki_guest_tries") || "0");
+      if (tries >= 2) {
+         navigate("/login");
+         return;
+      }
+      localStorage.setItem("medoki_guest_tries", (tries + 1).toString());
+    }
+
     setMode(selectedMode);
     setQuery(text);
     setResult(null);
@@ -192,6 +229,30 @@ const Index = () => {
             alt="Medoki Logo" 
             className="w-auto h-[144px] object-contain relative z-10 drop-shadow-[0_0_12px_rgba(52,211,153,0.6)] hover:scale-[1.02] transition-all duration-[400ms]" 
           />
+        </div>
+        
+        <div className="absolute top-4 right-4 z-50 flex items-center gap-2 animate-fade-in-up">
+           {authLoading ? (
+               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+           ) : user ? (
+             <button
+                type="button"
+                onClick={() => signOut()}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-muted/40 text-xs font-semibold text-foreground shadow-sm border border-border/50 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                Çıkış
+              </button>
+           ) : (
+             <button
+                type="button"
+                onClick={() => navigate("/login")}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-primary text-white shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95"
+              >
+                Giriş Yap
+                <LogIn className="w-3.5 h-3.5" />
+              </button>
+           )}
         </div>
       </header>
 
