@@ -77,15 +77,15 @@ export default function Login() {
 
       <div className="w-full max-w-sm flex flex-col animate-fade-in-up">
         {/* Logo/Başlık Alanı */}
-        <div className="flex flex-col items-center mb-10">
+        <div className="flex flex-col items-center justify-center mb-8">
           <img 
             src="/logo.png" 
             alt="Medoki Logo" 
-            className="w-auto h-[120px] object-contain relative z-10 drop-shadow-[0_0_12px_rgba(52,211,153,0.6)] mb-3" 
+            className="w-auto h-[150px] object-contain relative z-10 drop-shadow-[0_0_12px_rgba(52,211,153,0.6)] -mb-2" 
           />
-          <div className="text-center">
+          <div className="flex flex-col items-center text-center">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">Medoki</h1>
-            <p className="text-xs font-semibold text-primary/80 tracking-widest uppercase mt-1">Akıllı Sağlık Rehberiniz</p>
+            <p className="text-[11px] font-bold text-primary/80 tracking-widest uppercase mt-0.5">Akıllı Sağlık Rehberiniz</p>
           </div>
         </div>
 
