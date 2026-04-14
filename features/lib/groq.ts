@@ -166,6 +166,12 @@ export interface SymptomValidation {
 }
 
 export async function validateSymptom(userText: string): Promise<SymptomValidation> {
+  // ─── Cache ───────────────────────────────────────────────────────────────────
+  const cacheKey = `val_sym:${userText.trim().toLowerCase()}`;
+  const cached = await getCachedAnalysis<SymptomValidation>(cacheKey);
+  if (cached) return cached;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const prompt = `Sen Türk tıp terminolojisine ve eczacılığına hakim bir uzmansın.
 Kullanıcı şikayetini/semptomunu şöyle girdi: "${userText}"
 
@@ -226,11 +232,13 @@ EK KURAL: Girdi zaten doğru ve eksiksiz yazılmışsa (örn. "Baş Ağrısı", 
     const stage: SymptomValidationStage = ["auto_correct", "suggestion", "error"].includes(parsed.stage)
       ? parsed.stage
       : "error";
-    return {
+    const result: SymptomValidation = {
       stage,
       correctedTerm: parsed.correctedTerm || undefined,
       suggestion: parsed.suggestion || undefined,
     };
+    void setCachedAnalysis(cacheKey, result);
+    return result;
   } catch {
     // Fail-open: doğru girdi sayılsın
     return { stage: "auto_correct", correctedTerm: userText };
@@ -369,6 +377,13 @@ Kurallar:
 
 export async function checkTypo(userText: string): Promise<string | null> {
   if (!userText || userText.length < 3) return null;
+
+  // ─── Cache ───────────────────────────────────────────────────────────────────
+  const cacheKey = `typo:${userText.trim().toLowerCase()}`;
+  const cached = await getCachedAnalysis<string | null>(cacheKey);
+  if (cached !== null && cached !== undefined) return cached;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const prompt = `Kullanıcı şu tıbbi terimi/ilacı arattı: "${userText}".
 Yalnızca geçerli JSON döndür. Eğer kelimede bariz bir harf/yazım hatası varsa (örneğin "Buscopon" -> "Buscopan", "Aferi" -> "Aferin"), düzeltilmiş, en yaygın bilinen halini "suggestion" alanına yaz. Eğer hata yoksa veya emin değilsen "suggestion" alanını null bırak.
 ÖNEMLİ: Sadece ve sadece bariz yazım hatalarını düzelt. Kullanıcı doğru bir ilaç adı yazdıysa asla başka bir ilaç önerme, null döndür.
@@ -378,7 +393,9 @@ JSON şeması:
 }`;
   try {
     const parsed = await groqJsonCompletion(prompt, 50);
-    return parsed.suggestion || null;
+    const result = parsed.suggestion || null;
+    void setCachedAnalysis(cacheKey, result);
+    return result;
   } catch {
     return null;
   }
@@ -392,6 +409,12 @@ export interface MedicineValidation {
 }
 
 export async function validateMedicine(userText: string): Promise<MedicineValidation> {
+  // ─── Cache ───────────────────────────────────────────────────────────────────
+  const cacheKey = `val_med:${userText.trim().toLowerCase()}`;
+  const cached = await getCachedAnalysis<MedicineValidation>(cacheKey);
+  if (cached) return cached;
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const prompt = `Sen Türkiye'deki eczanelere ve tıp literatürüne son derece hakim bir uzmansın.
 Kullanıcı şu metni girdi: "${userText}"
 
@@ -444,12 +467,14 @@ suggestion:
 
   try {
     const parsed = await groqJsonCompletion(prompt, 150);
-    return {
+    const result: MedicineValidation = {
       isValid: parsed.isValid === true,
       isTypo: parsed.isTypo === true,
       isSymptom: parsed.isSymptom === true,
       suggestion: parsed.suggestion || null,
     };
+    void setCachedAnalysis(cacheKey, result);
+    return result;
   } catch {
     return { isValid: true, isTypo: false, isSymptom: false, suggestion: null };
   }
