@@ -212,9 +212,9 @@ Kurallar — SADECE BİRİ UYGULANIR:
 2. AŞAMA: suggestion
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    - Girdi tıbbi bir terime benziyor ama %100 emin olamazsın ya da birden fazla olası yorum var.
-   - Klavye kayması ("bqz", "mğde"), yanlış tuş, hece karışıklığı, birden fazla karakter hatası bu aşamayı tetikler.
-   - Örnekler: "baz ağrısı" → "Baş Ağrısı", "bqz ağrısı" → "Baş Ağrısı", "mğde agrıs" → "Mide Ağrısı", "baç dömsei" → "Baş Dönmesi".
-   - Tahmin en makul ihtimal olmalı; tamamen uydurma öneri üretme.
+   - EŞİK DEĞERİ (%80-90) & SÖZLÜK: Öneri yaparken SADECE Türkçe tıp literatüründe/sözlükte anlamı olan (örn: Göğüs, Baş, Bel) GERÇEK kelimeleri referans al.
+   - SAÇMA ÖNERİYİ GİZLE: Kullanıcı örneğin 'göpüs' yazdığında sakın 'göpüs' diye sahte bir kelime türetme ve önerme. Hedef kelime ile kullanıcı kelimesi en az %80 eşleşmeli. (Yanlış harf hedefin mantığına veya klavye kaymasına çok ters ise "suggestion" olarak uydurma üretme, direkt 3. AŞAMA'ya at).
+   - Örnekler: "baz ağrısı" → "Baş Ağrısı", "mğde agrıs" → "Mide Ağrısı", "baç dömsei" → "Baş Dönmesi".
    - stage: "suggestion", correctedTerm: null, suggestion: en makul tıbbi terim tahmini.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -385,8 +385,11 @@ export async function checkTypo(userText: string): Promise<string | null> {
   // ─────────────────────────────────────────────────────────────────────────────
 
   const prompt = `Kullanıcı şu tıbbi terimi/ilacı arattı: "${userText}".
-Yalnızca geçerli JSON döndür. Eğer kelimede bariz bir harf/yazım hatası varsa (örneğin "Buscopon" -> "Buscopan", "Aferi" -> "Aferin"), düzeltilmiş, en yaygın bilinen halini "suggestion" alanına yaz. Eğer hata yoksa veya emin değilsen "suggestion" alanını null bırak.
-ÖNEMLİ: Sadece ve sadece bariz yazım hatalarını düzelt. Kullanıcı doğru bir ilaç adı yazdıysa asla başka bir ilaç önerme, null döndür.
+Yalnızca geçerli JSON döndür. Eğer kelimede bariz bir harf/yazım hatası varsa düzeltilmiş onaylı halini "suggestion" alanına yaz. Eğer hata yoksa veya emin değilsen "suggestion" alanını null bırak.
+ÖNEMLİ KURALLAR:
+1. SÖZLÜK KONTROLÜ: Öneri yaparken sadece GERÇEK (piyasada var olan veya tıbben anlamlı) kelimeleri referans al. Kullanıcının girdiği saçma veya uydurma bir kelimeyi (örn: 'göpüs') asla 'göpüs' diye önerme.
+2. EŞİK DEĞERİ: Girdi, önereceğin kelimeyle %80-90 oranında kelime, klavye ve görünüm olarak uyuşmuyorsa (veya önerilen kelimedeki asıl kök harflerle ilgisi yoksa) O ÖNERİYİ ELE (null dön).
+3. Doğru ilaç adı yazıldıysa asla başka ilaç önerme, null dön.
 JSON şeması:
 {
   "suggestion": "düzeltilmiş kelime veya null"
@@ -449,6 +452,7 @@ isValid:
 
 isTypo:
   - Sadece inputType "medicine" olan bir girdide yazım hatası varsa true.
+  - ÖNERİ SAĞLAMASI: Suggestion alanına yazdığın kelime KESİNLİKLE gerçek bir ilaç/terim olmalı. Eşik Değeri (%80 uyuşma) yakalanmıyorsa ve uydurma ("göpüs" gibi) bir kelime ise isTypo: false, inputType: invalid olarak dön.
   - "Macezik" → "Majezik", "Parool" → "Parol" gibi.
   - isSymptom: true ise isTypo kesinlikle false olmalı.
 
