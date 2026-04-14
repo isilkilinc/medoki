@@ -8,7 +8,7 @@ import BottomNav, { TabType } from "@/components/BottomNav";
 import ProfileScreen from "@/components/ProfileScreen";
 import SettingsScreen from "@/components/SettingsScreen";
 import type { ReactNode } from "react";
-import { analyzeMedicine, analyzeSymptom, validateMedicine } from "@/lib/groq";
+import { analyzeMedicine, analyzeSymptom, validateMedicine, validateSymptom } from "@/lib/groq";
 import type { MedicineResult, SymptomResult } from "@/lib/groq";
 import { useLanguage } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
@@ -27,6 +27,8 @@ const Index = () => {
   const [query, setQuery] = useState("");
   const [result, setResult] = useState<MedicineResult | SymptomResult | null>(null);
   const [error, setError] = useState<ReactNode | null>(null);
+  // Semptom Aşama-2 önerisi: kullanıcıya tıklanabilir "Bunu mu demek istediniz?" gösterir
+  const [symptomSuggestion, setSymptomSuggestion] = useState<{ original: string; corrected: string } | null>(null);
 
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
@@ -67,6 +69,7 @@ const Index = () => {
     setQuery(text);
     setResult(null);
     setError(null);
+    setSymptomSuggestion(null);
     setIsLoading(true);
     setScreen("results");
 
@@ -74,11 +77,41 @@ const Index = () => {
       if (selectedMode === "medicine") {
         const validation = await validateMedicine(text);
 
-        // Kendi kendine öneri hatasını donanımsal olarak engelle:
         if (!validation.isValid && validation.isTypo && validation.suggestion) {
           if (validation.suggestion.toLowerCase() === text.toLowerCase()) {
             validation.isValid = true; // Zaten o ilacı aratmış, engelleme!
           }
+        }
+
+        // Semptom girildiyse ilaç analizine izin verme, yönlendirme göster
+        if (validation.isSymptom) {
+          setError(
+            <div className="flex flex-col gap-2">
+              <span>
+                <strong>"{text}"</strong> bir semptomdur; ilaç analizi yapılamaz.
+              </span>
+              <span className="font-medium text-primary">
+                Semptom analizi için lütfen{" "}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab("home");
+                    setScreen("home");
+                    setError(null);
+                    setResult(null);
+                    // Semptom sekmesini açıp analizi otomatik başlat
+                    handleAnalyze(text, "symptom");
+                  }}
+                  className="font-bold underline cursor-pointer hover:text-emerald-400 transition-colors"
+                >
+                  Semptom Önerisi
+                </button>{" "}
+                sekmesini kullanın.
+              </span>
+            </div>
+          );
+          setIsLoading(false);
+          return;
         }
 
         if (!validation.isValid) {
@@ -113,8 +146,28 @@ const Index = () => {
         saveToHistory(res.correctedTerm || text);
         setResult(res);
       } else {
-        const res = await analyzeSymptom(text);
-        saveToHistory(res.correctedTerm || text);
+        // ── SEMPTOM MODU: 3 AŞAMALI DOĞRULAMA ──
+        const symptomVal = await validateSymptom(text);
+
+        if (symptomVal.stage === "error") {
+          // Aşama 3: Tamamen anlamsız — sadece hata göster, analiz başlatma
+          setError("Girdiğiniz semptom anlaşılamadı. Lütfen bilinen bir şikayet veya semptom adı yazınız.");
+          setIsLoading(false);
+          return;
+        }
+
+        if (symptomVal.stage === "suggestion" && symptomVal.suggestion) {
+          // Aşama 2: Kısmi hata — analiz başlatma, öneri göster
+          setIsLoading(false);
+          setScreen("home"); // Sonuç ekranına geçme, home'da kal
+          setSymptomSuggestion({ original: text, corrected: symptomVal.suggestion });
+          return;
+        }
+
+        // Aşama 1: auto_correct — düzeltilmiş kelimeyle analiz başlat
+        const termToAnalyze = symptomVal.correctedTerm || text;
+        const res = await analyzeSymptom(termToAnalyze);
+        saveToHistory(res.correctedTerm || termToAnalyze);
         setResult(res);
       }
     } catch (err) {
@@ -155,7 +208,27 @@ const Index = () => {
       <main className="relative z-[1] max-w-[480px] mx-auto px-4 pb-24">
         {activeTab === "home" && (
           screen === "home" ? (
-            <HomeScreen onAnalyze={handleAnalyze} isLoading={isLoading} />
+            <>
+              {/* Semptom Aşaması-2: analiz başlatılmadan öneri göster */}
+              {symptomSuggestion && (
+                <div className="mb-4 px-4 py-3 rounded-2xl border border-primary/30 bg-primary/10 text-sm animate-fade-in-up">
+                  <span className="text-muted-foreground">Bunu mu demek istediniz:{" "}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const corrected = symptomSuggestion.corrected;
+                      setSymptomSuggestion(null);
+                      handleAnalyze(corrected, "symptom");
+                    }}
+                    className="font-bold text-primary underline underline-offset-2 cursor-pointer hover:text-emerald-400 transition-colors"
+                  >
+                    {symptomSuggestion.corrected}
+                  </button>
+                  ?
+                </div>
+              )}
+              <HomeScreen onAnalyze={(text, mode) => { setSymptomSuggestion(null); handleAnalyze(text, mode); }} isLoading={isLoading} />
+            </>
           ) : (
             <ResultsScreen
               mode={mode}

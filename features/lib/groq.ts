@@ -1,3 +1,5 @@
+import { getCachedAnalysis, setCachedAnalysis } from "./supabase";
+
 const API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
 function stripCodeFences(value: string): string {
@@ -16,7 +18,7 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "llama-3.1-8b-instant",
       temperature: 0.2,
       max_tokens: maxTokens,
       response_format: { type: "json_object" },
@@ -93,6 +95,16 @@ function symptomProductHeadline(p: { activeIngredient: string; brandExamples: st
 }
 
 export async function analyzeMedicine(userText: string): Promise<MedicineResult> {
+  // ─── Cache: önce Supabase'e bak ──────────────────────────────────────────────
+  const cacheKey = `medicine:${userText.trim().toLowerCase()}`;
+  const cached = await getCachedAnalysis<MedicineResult>(cacheKey);
+  if (cached) {
+    console.log(`[Cache HIT] ${cacheKey}`);
+    return cached;
+  }
+  console.log(`[Cache MISS] ${cacheKey} → Groq API çağrılıyor`);
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const prompt = `
 Kullanıcıdan gelen ilaç adını analiz et: "${userText}"
 
@@ -124,7 +136,7 @@ Kurallar:
 
   const parsed = await groqJsonCompletion(prompt, 1100);
 
-  return {
+  const result: MedicineResult = {
     correctedTerm: parsed.correctedTerm || userText,
     purpose: parsed.purpose || "Bilgi alınamadı.",
     dosage: parsed.dosage || "Bilgi alınamadı.",
@@ -135,18 +147,167 @@ Kurallar:
     disclaimer: parsed.disclaimer || "Bu çıktı genel bilgilendirme içindir; doktor veya eczacı önerisinin yerine geçmez.",
     userExperiences: normalizeUserExperiences(parsed.userExperiences),
   };
+
+  // ─── Cache: sonucu Supabase'e kaydet (fire & forget) ─────────────────────────
+  void setCachedAnalysis(cacheKey, result);
+
+  return result;
 }
 
+// ─── Semptom Doğrulama (3 Aşamalı) ───────────────────────────────────────────
+export type SymptomValidationStage = "auto_correct" | "suggestion" | "error";
+
+export interface SymptomValidation {
+  stage: SymptomValidationStage;
+  /** Aşama 1: otomatik düzeltilmiş terim (direkt analiz başlat) */
+  correctedTerm?: string;
+  /** Aşama 2: kullanıcıya gösterilecek öneri */
+  suggestion?: string;
+}
+
+export async function validateSymptom(userText: string): Promise<SymptomValidation> {
+  const prompt = `Sen Türk tıp terminolojisine ve eczacılığına hakim bir uzmansın.
+Kullanıcı şikayetini/semptomunu şöyle girdi: "${userText}"
+
+Aşağıdaki JSON şemasına SADECE geçerli JSON döndür. Markdown, code block, ek açıklama kullanma:
+{
+  "stage": "auto_correct" | "suggestion" | "error",
+  "correctedTerm": "string veya null",
+  "suggestion": "string veya null"
+}
+
+Kurallar — SADECE BİRİ UYGULANIR:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1. AŞAMA: auto_correct  ← EN KATLI KURAL. Şüphen varsa KULLANMA.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Kullanılma koşulları — TÜMÜ aynı anda sağlanmalı:
+     a) Yanlış yazılan sözcük Türkçe tıp literatüründe TEK bir terimle eşleşiyor (başka hiçbir yoruma kapı bırakmıyor).
+     b) Hata YALNIZCA tek bir sözcüğün içinde, tek bir eksik sesli harften (ı, i, u, ü, a, e, o, ö) ibaret.
+     c) %100 eminsin — en küçük belirsizlik varsa bu aşamayı kullanma.
+
+   ✅ KABUL (sadece bu kalıplar auto_correct olabilir):
+     "baş ağrsı"    → "Baş Ağrısı"   ('ı' eksik, tek hece, tek ihtimal)
+     "öksrük"       → "Öksürük"       ('ü' eksik, tek ihtimal)
+     "boyun ağrsi"  → "Boyun Ağrısı"  ('ı' eksik, tek ihtimal)
+     "mide ağrsi"   → "Mide Ağrısı"   ('ı' eksik, tek ihtimal)
+     "ates"         → "Ateş"           ('ş' harfi eksik, tek ihtimal)
+
+   ❌ YASAK — Bu tür girdiler KESİNLİKLE auto_correct OLAMAZ (suggestion olmalı):
+     "baz ağrısı"   → baş / baz / bel / boyun hangisi? Kesin değil  → suggestion
+     "bqz ağrısı"   → klavye kayması, baş mı bel mi baz mı belirsiz → suggestion
+     "bş ağrısı"    → baş mı boş mu belirsiz                        → suggestion
+     "krin ağrısı"  → karın mı karin mı belirsiz                    → suggestion
+     "mğde agrıs"   → birden fazla hata var                         → suggestion
+
+   stage: "auto_correct", correctedTerm: düzeltilmiş profesyonel terim (Başlık Büyük Harf), suggestion: null.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2. AŞAMA: suggestion
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   - Girdi tıbbi bir terime benziyor ama %100 emin olamazsın ya da birden fazla olası yorum var.
+   - Klavye kayması ("bqz", "mğde"), yanlış tuş, hece karışıklığı, birden fazla karakter hatası bu aşamayı tetikler.
+   - Örnekler: "baz ağrısı" → "Baş Ağrısı", "bqz ağrısı" → "Baş Ağrısı", "mğde agrıs" → "Mide Ağrısı", "baç dömsei" → "Baş Dönmesi".
+   - Tahmin en makul ihtimal olmalı; tamamen uydurma öneri üretme.
+   - stage: "suggestion", correctedTerm: null, suggestion: en makul tıbbi terim tahmini.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3. AŞAMA: error
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   - Girdi tamamen anlamsız, rastgele karakter dizisi veya hiçbir Türkçe tıbbi terimle ilişkilendirilemez.
+   - Örnekler: "vzka skaa", "asdfg", "xjqpw".
+   - stage: "error", correctedTerm: null, suggestion: null.
+
+EK KURAL: Girdi zaten doğru ve eksiksiz yazılmışsa (örn. "Baş Ağrısı", "mide bulantısı", "ateş") stage: "auto_correct" ve correctedTerm başlık büyük harf formatında döndür.
+`;
+
+  try {
+    const parsed = await groqJsonCompletion(prompt, 120);
+    const stage: SymptomValidationStage = ["auto_correct", "suggestion", "error"].includes(parsed.stage)
+      ? parsed.stage
+      : "error";
+    return {
+      stage,
+      correctedTerm: parsed.correctedTerm || undefined,
+      suggestion: parsed.suggestion || undefined,
+    };
+  } catch {
+    // Fail-open: doğru girdi sayılsın
+    return { stage: "auto_correct", correctedTerm: userText };
+  }
+}
+// ──────────────────────────────────────────────────────────────────────────────
+
 export async function analyzeSymptom(userText: string): Promise<SymptomResult> {
+  // ─── RED FLAG PROTOCOL (Kod Katmanı) ───────────────────────────────────────
+  // Hayati tehlike taşıyan semptomlar tespit edilirse AI çağrılmaz,
+  // kullanıcı doğrudan acil servise yönlendirilir.
+  const RED_FLAG_KEYWORDS = [
+    // Göğüs & Kalp
+    "göğüs ağrısı", "gogus agrisi", "gögüs ağrısı", "göğüs sıkışması",
+    "kalp krizi", "kalp ağrısı", "kalp çarpıntısı", "çarpıntı",
+    "nefes darlığı", "nefes alamıyorum", "nefes alamiyorum",
+    // Bilinç & Nöroloji
+    "bilinç kaybı", "bayılma", "baygınlık", "bayıldım", "baygın",
+    "felç", "inme", "uyuşma yüz", "konuşamıyorum", "konusamiyorum",
+    // Ciddi karın & İç organ ağrısı
+    "şiddetli karın ağrısı", "siddetli karin agrisi", "ani karın ağrısı",
+    // Ciddi kanama & Diğer aciller
+    "ciddi kanama", "kanlı idrar", "kan kusma", "kan kusuyor",
+  ];
+
+  const normalizedInput = userText.toLowerCase().trim();
+  const isRedFlag = RED_FLAG_KEYWORDS.some(kw => normalizedInput.includes(kw));
+
+  if (isRedFlag) {
+    const warning = `KRİTİK UYARI: "${userText}" gibi belirtiler ciddi bir sağlık sorununun (örn: kalp krizi, felç) işareti olabilir. Lütfen hiçbir ilaç kullanmadan DERHAL 112 Acil Çağrı Merkezi'ni arayın veya en yakın acil servise başvurun.`;
+    return {
+      correctedTerm: userText,
+      intro: warning,
+      products: [],
+      generalTips: ["Belirtiler geçmeden hareket etmeyin, yere oturun veya uzanın.", "Yanınızdaki birinden 112'yi aramasını isteyin.", "Herhangi bir ilaç veya yiyecek almayın."],
+      whenToSeeDoctor: ["DERHAL 112'yi arayın veya en yakın acil servise gidin."],
+      disclaimer: "Bu mesaj otomatik bir güvenlik uyarısıdır. Lütfen tıbbi acil durumda zaman kaybetmeden yardım isteyin.",
+      userExperiences: [],
+    };
+  }
+  // ──────────────────────────────────────────────────────────────────────────
+
+  // ─── Cache: red flag değilse önce Supabase'e bak ──────────────────────────────
+  const cacheKey = `symptom:${normalizedInput}`;
+  const cached = await getCachedAnalysis<SymptomResult>(cacheKey);
+  if (cached) {
+    console.log(`[Cache HIT] ${cacheKey}`);
+    return cached;
+  }
+  console.log(`[Cache MISS] ${cacheKey} → Groq API çağrılıyor`);
+  // ─────────────────────────────────────────────────────────────────────────────
+
   const prompt = `
 Kullanıcının şikayeti / semptomu: "${userText}"
 
-Bu semptoma yönelik yalnızca reçetesiz (OTC) seçenekler öner. Reçeteli ilaç, antibiyotik veya kontrollü madde önerme.
+⚠️ RED FLAG PROTOKOLÜ (AI Katmanı — En Yüksek Öncelik):
+Eğer kullanıcının semptomu şunlardan herhangi birini içeriyorsa ASLA ilaç önerme:
+  → Göğüs ağrısı, göğüs sıkışması, kalp krizi şüphesi
+  → Nefes darlığı, nefes alamama
+  → Kalp çarpıntısı (şiddetli veya ani başlangıçlı)
+  → Bilinç kaybı, bayılma, felç belirtisi (yüzde uyuşma, konuşamama)
+  → Şiddetli/ani karın ağrısı (iç organ hasarı riski)
+Bu semptomlarda products dizisini BOŞ bırak ve intro alanına şunu yaz:
+"KRİTİK UYARI: Bu belirtiler ciddi bir sağlık sorununun işareti olabilir. Hiçbir ilaç kullanmadan DERHAL 112'yi arayın veya en yakın acil servise başvurun."
 
+Bu semptoma yönelik yalnızca reçetesiz (OTC) seçenekler öner. Reçeteli ilaç, antibiyotik veya kontrollü madde önerme.
 Her öneride yalnızca etken madde adını tek başına yazma: Türkiye'de eczanede en yaygın bilinen ticari marka örneklerini de ver.
 
-Yalnızca geçerli JSON döndür. Markdown, ek açıklama, code block kullanma.
-JSON şeması:
+Semptomu dikkatlice analiz et ve sadece o semptomu doğrudan hedefleyen, spesifik OTC seçeneklerini öner.
+Her şikayete tembelce Parasetamol veya İbuprofen önerme; semptomun doğasına uygun çözümleri önceliklendir:
+- Mide/sindirim şikayetlerinde antiasit, H2 blokör veya probiyotik öner (bu kategoride NSAİİ'ler mideye zarar verir, önerme).
+- Kas/eklem/bel ağrılarında topikal jel, krem veya ısıtıcı bant gibi lokal çözümleri önce sırala.
+- Boğaz ağrısı ve soğuk algınlığında pastil, boğaz spreyi veya deniz suyu spreyi gibi semptoma özgü ürünleri öner.
+- Alerji/cilt şikayetlerinde antihistaminik jel, yatıştırıcı krem gibi topikal seçenekleri öne çıkar.
+- Gerçek anlamda ağrı veya ateş eşlik ediyorsa Parasetamol ya da İbuprofen ekleyebilirsin, ancak bunların listede tek seçenek olmamasına dikkat et.
+
+Aşağıdaki JSON şemasına tam uygun şekilde yanıt ver. Yalnızca geçerli JSON döndür, markdown veya code block kullanma:
 {
   "correctedTerm": "string",
   "intro": "string",
@@ -168,17 +329,17 @@ JSON şeması:
 
 Kurallar:
 - Dil: Türkçe.
-- ÖNEMLİ: Kullanıcının girdiği metindeki bariz tıbbi yazım hatalarını veya argoları (örn. "reg" -> "regl", "başş" -> "baş ağrısı") otomatik olarak doğru ve profesyonel tıbbi terime çevir.
-- "intro" metnini ve geri kalan tüm açıklamaları mutlaka bu düzeltilmiş, profesyonel tıbbi terimi kullanarak oluştur.
+- ÖNEMLİ: correctedTerm alanına mutlaka kullanılan profesyonel tıbbi terimi düzgün başlık formatında yaz (örn. "Baş Ağrısı", "Mide Bulantısı"). "intro" ve diğer açıklamalarda bu terimi kullan.
 - 3 ila 5 arası ürün öner.
 - Her products öğesinde activeIngredient ve brandExamples (en az 2 marka) zorunlu.
+- form alanı net olsun: "Tablet", "Jel", "Krem", "Sprey", "Şurup", "Pastil", "Bant" vb.
 - Hamilelik, kronik hastalık, çocuk, alerji gibi durumlarda mutlaka eczacı/doktor uyarısı yaz.
 - userExperiences: Bu semptom veya önerilen OTC ürünlerle ilgili internetteki kullanıcı yorumlarında geçen yaygın temaları 3 kısa maddeyle özetle.`.trim();
 
   const parsed = await groqJsonCompletion(prompt, 1600);
   const products = Array.isArray(parsed.products) ? parsed.products : [];
 
-  return {
+  const result: SymptomResult = {
     correctedTerm: parsed.correctedTerm || userText,
     intro: parsed.intro || "Bilgi alınamadı.",
     products: products.map((p: any) => {
@@ -199,6 +360,11 @@ Kurallar:
     disclaimer: parsed.disclaimer || "Bu çıktı genel bilgilendirme içindir; teşhis veya tedavi yerine geçmez.",
     userExperiences: normalizeUserExperiences(parsed.userExperiences),
   };
+
+  // ─── Cache: sonucu Supabase'e kaydet (fire & forget) ─────────────────────────
+  void setCachedAnalysis(cacheKey, result);
+
+  return result;
 }
 
 export async function checkTypo(userText: string): Promise<string | null> {
@@ -221,30 +387,70 @@ JSON şeması:
 export interface MedicineValidation {
   isValid: boolean;
   isTypo: boolean;
+  isSymptom: boolean;
   suggestion: string | null;
 }
 
 export async function validateMedicine(userText: string): Promise<MedicineValidation> {
-  const prompt = `Sen Türkiye'deki eczanelere ve tıp literatürüne son derece hakim bir uzmansın. Kullanıcı şu metni (ilaç adı, şikayet veya tıbbi terim) girdi: "${userText}".
-Yalnızca geçerli JSON döndür:
+  const prompt = `Sen Türkiye'deki eczanelere ve tıp literatürüne son derece hakim bir uzmansın.
+Kullanıcı şu metni girdi: "${userText}"
+
+Önce girdinin ne olduğuna karar ver, sonra JSON üret. Yalnızca geçerli JSON döndür, başka hiçbir şey yazma:
 {
-  "isValid": boolean, 
-  "isTypo": boolean, 
-  "suggestion": "Eğer isTypo true ise ve %100 eminsen, en doğru profesyonel tıbbi terim/ilaç adı. Aksi halde null"
+  "inputType": "medicine" | "symptom" | "invalid",
+  "isValid": boolean,
+  "isTypo": boolean,
+  "isSymptom": boolean,
+  "suggestion": "string veya null"
 }
-Kurallar:
-1. Girdi kelime, zaten doğru ve mantıklı bir tıbbi terim, ilaç veya takviye adıysa (Örn: Majezik, Parol, Baş ağrısı, Calpol, Dolven, Ibufen, Magnezyum, D Vitamini, Omega-3), kesinlikle isValid: true ve isTypo: false dön, suggestion null olsun.
-2. Yazım hatası veya argo varsa (Örn: "Macezik" -> "Majezik", "reg aris" veya "reg" -> "Regl Ağrısı", "başş" -> "Baş Ağrısı"), isValid: false, isTypo: true dön. BURASI ÇOK ÖNEMLİ: Yalnızca, düzelttiğin kelime tıp literatüründe kesin ve profesyonel bir terimse suggestion alanını doldur.
-3. Asla uydurma, anlamsız kelimeler veya birbiriyle alakasız derme çatma tamlamalar (Örn: "Reg Aferi") üretme. %100 emin olmadığın tıbbi veya ilaç adları için suggestion: null yap ve isTypo: false yap.
-4. Girdi tamamen anlamsızsa (örn: "asdfg") veya tıbbi veya ilaç karşılığı yoksa, uydurma üretme (isValid: false, isTypo: false, suggestion: null).`;
+
+━━━ inputType nasıl belirlenir ━━━
+
+"medicine" → İlaç ticari adı (Parol, Arveles, Majezik, Calpol, Ibufen, Augmentin, Xanax, vb.),
+              etken madde adı (İbuprofen, Parasetamol, Amoksisilin, vb.),
+              vitamin/takviye adı (D Vitamini, Magnezyum, Omega-3, vb.).
+
+"symptom"  → Kullanıcının hissettiği fiziksel şikayet veya belirti:
+              Baş ağrısı, mide bulantısı, ateş, öksürük, regl ağrısı, karın ağrısı,
+              boğaz ağrısı, burun akıntısı, ishal, kabızlık, baş dönmesi, vb.
+              KURAL: Girdi bir semptom/şikayet ise isSymptom: true, isValid: false, isTypo: false, suggestion: null döndür.
+
+"invalid"  → Tamamen anlamsız, rastgele karakter dizisi (örn: "asdfg", "vzka skaa").
+
+━━━ Diğer alanlar ━━━
+
+isValid:
+  - inputType "medicine" ise → isValid: true (ilaç adı geçerli ve yazım hatası yok).
+  - inputType "medicine" ama yazım hatası varsa → isValid: false, isTypo: true.
+  - inputType "symptom" veya "invalid" → isValid: false.
+
+isTypo:
+  - Sadece inputType "medicine" olan bir girdide yazım hatası varsa true.
+  - "Macezik" → "Majezik", "Parool" → "Parol" gibi.
+  - isSymptom: true ise isTypo kesinlikle false olmalı.
+
+suggestion:
+  - isTypo: true ise ve %100 eminsen, doğru ilaç adını yaz.
+  - Diğer tüm durumlarda null.
+
+━━━ Örnekler ━━━
+  "Majezik"      → inputType:"medicine", isValid:true,  isTypo:false, isSymptom:false, suggestion:null
+  "Macezik"      → inputType:"medicine", isValid:false, isTypo:true,  isSymptom:false, suggestion:"Majezik"
+  "baş ağrısı"   → inputType:"symptom",  isValid:false, isTypo:false, isSymptom:true,  suggestion:null
+  "mide bulantısı" → inputType:"symptom",isValid:false, isTypo:false, isSymptom:true,  suggestion:null
+  "ateş"         → inputType:"symptom",  isValid:false, isTypo:false, isSymptom:true,  suggestion:null
+  "D Vitamini"   → inputType:"medicine", isValid:true,  isTypo:false, isSymptom:false, suggestion:null
+  "asdfg"        → inputType:"invalid",  isValid:false, isTypo:false, isSymptom:false, suggestion:null`;
+
   try {
-    const parsed = await groqJsonCompletion(prompt, 100);
+    const parsed = await groqJsonCompletion(prompt, 150);
     return {
       isValid: parsed.isValid === true,
       isTypo: parsed.isTypo === true,
+      isSymptom: parsed.isSymptom === true,
       suggestion: parsed.suggestion || null,
     };
   } catch {
-    return { isValid: true, isTypo: false, suggestion: null };
+    return { isValid: true, isTypo: false, isSymptom: false, suggestion: null };
   }
 }
