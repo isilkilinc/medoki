@@ -6,9 +6,13 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   console.warn(
-    "[Medoki] Supabase ortam değişkenleri eksik. " +
-      "VITE_SUPABASE_URL ve VITE_SUPABASE_ANON_KEY tanımlı olmalı."
+    `[Medoki] Supabase ortam değişkenleri EKSİK!
+     VITE_SUPABASE_URL algılanan: "${SUPABASE_URL || 'BOŞ/UNDEFINED'}"
+     VITE_SUPABASE_ANON_KEY algılanan: "${SUPABASE_ANON_KEY ? 'VAR' : 'BOŞ/UNDEFINED'}"
+    `
   );
+} else {
+  console.log("[Medoki] Supabase ortam değişkenleri başarıyla yüklendi.");
 }
 
 // URL boş olunca createClient anında hata fırlatıp tüm web sitesini (siyah ekrana) çökertiyordu.
