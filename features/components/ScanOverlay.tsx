@@ -80,7 +80,7 @@ const photoInputRef = useRef<HTMLInputElement>(null);
           <button 
             type="submit"
             disabled={isScanning || !input.trim()}
-            className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold text-lg cursor-pointer transition-all hover:shadow-[0_0_30px_rgba(52,211,153,0.35)] hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:shadow-none flex items-center justify-center gap-2.5"
+            className="w-full py-4 rounded-2xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-bold text-lg cursor-pointer transition-all hover:shadow-[0_0_30px_rgba(52,211,153,0.35)] hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100 disabled:hover:shadow-none flex items-center justify-center gap-2.5 mt-2"
           >
             {isScanning ? (
               <>
