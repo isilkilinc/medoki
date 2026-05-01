@@ -2,6 +2,14 @@ import { getCachedAnalysis, setCachedAnalysis } from "./supabase";
 
 const API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
+// ─── Güvenli sabit userExperiences metinleri ─────────────────────────────────
+// Model internete bağlı değil — uydurma "kullanıcı yorumu" üretmesini engelliyoruz.
+const SAFE_USER_EXPERIENCES = [
+  "Kullanıcı deneyimleri kişiden kişiye önemli ölçüde farklılık gösterebilir.",
+  "Herhangi bir yan etki veya beklenmedik etki durumunda ilacı bırakıp eczacınıza danışın.",
+  "Bu bilgiler gerçek kullanıcı yorumlarına değil, genel tıbbi literatüre dayanmaktadır.",
+];
+
 function stripCodeFences(value: string): string {
   return value.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "");
 }
@@ -18,12 +26,17 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
-      temperature: 0.2,
+      // llama3-70b-8192: 8B modeline göre ilaç bilgisinde çok daha güvenilir
+      model: "llama3-70b-8192",
+      temperature: 0.1, // Düşük temperature = daha az uydurma
       max_tokens: maxTokens,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: "You are a highly skilled Turkish Pharmacist with deep knowledge of local Turkish brand names and their active ingredients. You MUST recognize and correctly map the following common Turkish brands to their active compounds: Parol/Calpol → Paracetamol, Arveles → Dexketoprofen, Majezik → Flurbiprofen, Dolven/Ibufen/Nurofen → Ibuprofen, Augmentin → Amoxicillin/Clavulanate, Desmont → Montelukast, Buscopan → Hyoscine, Dikloron → Diclofenac, Voltaren → Diclofenac, Cipro → Ciprofloxacin, Xanax → Alprazolam. Treat vitamins and supplements (Magnesium, Vitamin D, Omega-3) with the same rigor as drugs. Recognize pediatric brands (Calpol, Dolven, Ibufen). ALWAYS format the correctedTerm field as: 'BrandName (ActiveIngredient)' — e.g. 'Calpol (Parasetamol)', 'Augmentin (Amoksisilin/Klavulanat)'. Return only valid JSON, no markdown or code fences." },
+        {
+          role: "system",
+          content:
+            "You are a highly skilled Turkish Pharmacist with deep knowledge of local Turkish brand names and their active ingredients. You MUST recognize and correctly map the following common Turkish brands to their active compounds: Parol/Calpol → Paracetamol, Arveles → Dexketoprofen, Majezik → Flurbiprofen, Dolven/Ibufen/Nurofen → Ibuprofen, Augmentin → Amoxicillin/Clavulanate, Desmont → Montelukast, Buscopan → Hyoscine, Dikloron → Diclofenac, Voltaren → Diclofenac, Cipro → Ciprofloxacin, Xanax → Alprazolam. Treat vitamins and supplements (Magnesium, Vitamin D, Omega-3) with the same rigor as drugs. Recognize pediatric brands (Calpol, Dolven, Ibufen). ALWAYS format the correctedTerm field as: 'BrandName (ActiveIngredient)' — e.g. 'Calpol (Parasetamol)', 'Augmentin (Amoksisilin/Klavulanat)'. CRITICAL SAFETY RULE: For the 'dosage' field, NEVER invent specific mg amounts or daily frequencies. Instead, always write: 'Doz bilgisi için prospektüsü veya eczacınızı kontrol edin.' You may mention the general form (tablet, kapsül) but NOT specific numbers. Return only valid JSON, no markdown or code fences.",
+        },
         { role: "user", content: userContent },
       ],
     }),
@@ -49,32 +62,22 @@ function isLegitTypo(input: string, suggestion: string): boolean {
   const i = input.trim().toLowerCase();
   const s = suggestion.trim().toLowerCase();
   if (i === s) return false;
-  
+
   // Uzunluk farkı çok fazlaysa bu bir yazım hatası olamaz (eş anlamlıdır)
   if (Math.abs(i.length - s.length) > 4) return false;
-  
+
   // İlk harf tamamen farklıysa büyük ihtimalle eş anlamlı önermesidir (Arveles vs Dexketoprofen)
-  const exceptions = ["c","ç","s","ş","g","ğ","o","ö","u","ü","i","ı"];
+  const exceptions = ["c", "ç", "s", "ş", "g", "ğ", "o", "ö", "u", "ü", "i", "ı"];
   if (i[0] !== s[0] && !exceptions.includes(i[0])) {
     return false;
   }
   return true;
 }
 
-export function normalizeUserExperiences(raw: unknown): string[] {
-  const list = Array.isArray(raw) ? raw.map((s) => String(s).trim()).filter(Boolean) : [];
-  const fallbacks = [
-    "İnternetteki yorumlar kişiden kişiye farklılık gösterebilir.",
-    "Bazı kullanıcılar etkiyi hızlı hissettiklerini yazıyor; herkes için geçerli değildir.",
-    "Yan etki veya rahatsızlık bildiren yorumlar da sık görülür; şüphede uzmana danışın.",
-  ];
-  const out = [...list];
-  let i = 0;
-  while (out.length < 3 && i < fallbacks.length) {
-    if (!out.includes(fallbacks[i])) out.push(fallbacks[i]);
-    i += 1;
-  }
-  return out.slice(0, 3);
+export function normalizeUserExperiences(_raw: unknown): string[] {
+  // Güvenlik: Model internete bağlı değil, uydurma yorumlar üretir.
+  // Sabit ve doğru bilgi içeren metinler kullanıyoruz.
+  return [...SAFE_USER_EXPERIENCES];
 }
 
 export interface MedicineResult {
@@ -111,99 +114,95 @@ export interface SymptomResult {
 
 // ─── PharmacyGuard: Tıbbi Doğruluk ve Form Kontrolü ──────────────────────────
 const FORBIDDEN_FORMS_BY_SYMPTOM: Record<string, string[]> = {
-  // Sistematik Şikayetler (Sadece Tablet - Krem/Jel/Şurup Yasak)
   "baş ağrısı": ["krem", "jel", "fısfıs", "sprey", "bant", "şurup"],
   "ateş": ["krem", "jel", "bant", "şurup"],
   "halsizlik": ["krem", "jel", "şurup"],
   "regl": ["krem", "jel", "şurup"],
   "diş": ["krem", "jel", "şurup"],
   "kırgınlık": ["krem", "jel", "şurup"],
-  // Her senaryoda yasak (Yetişkin Odaklı)
   "şurup": ["şurup", "likit", "süspansiyon"],
-  // Lokal Şikayetler (Daha esnek - Krem/Jel ve Tablet olabilir)
   "mide": ["jel", "krem"],
   "göz": ["tablet", "kapsül"],
 };
 
 const BRAND_FORM_DEFAULTS: Record<string, string> = {
-  "majezik": "Tablet",
-  "arveles": "Tablet",
-  "dikloron": "Tablet",
-  "voltaren": "Tablet",
-  "parol": "Tablet",
-  "aprol": "Tablet",
-  "advil": "Kapsül",
-  "nurofen": "Tablet",
-  "dolorex": "Draje",
-  "dexday": "Efervesan Tablet",
+  majezik: "Tablet",
+  arveles: "Tablet",
+  dikloron: "Tablet",
+  voltaren: "Tablet",
+  parol: "Tablet",
+  aprol: "Tablet",
+  advil: "Kapsül",
+  nurofen: "Tablet",
+  dolorex: "Draje",
+  dexday: "Efervesan Tablet",
 };
 
-
-/**
- * İlaç formunu ve kullanım şeklini semptoma ve ilaca göre normalize eder.
- * AI sanrılarını (hallucinations) temizler ve tıbbi mantık sağlar.
- */
 function applyPharmacyGuard(product: SymptomProduct, symptom: string): SymptomProduct {
   const s = (symptom || "").toLowerCase();
   let f = product.form || "";
   let use = product.typicalUse || "";
 
-  // 1. Sektörel ve Sistematik Kısıtlamalar (Yetişkin Odaklı)
-  // Şurup formunu her durumda Tablet'e veya uygun bir yetişkin formuna çek
   if (f.toLowerCase().includes("şurup") || f.toLowerCase().includes("süspansiyon")) {
     f = "Tablet";
   }
 
-  // Semptom-Form Uyumluluğu
   for (const [key, forbidden] of Object.entries(FORBIDDEN_FORMS_BY_SYMPTOM)) {
     if (s.includes(key)) {
-      const isHallucinated = forbidden.some(fb => f.toLowerCase().includes(fb));
+      const isHallucinated = forbidden.some((fb) => f.toLowerCase().includes(fb));
       if (isHallucinated) {
-        const knownBrand = product.brandExamples.find(b => BRAND_FORM_DEFAULTS[b.toLowerCase()]);
+        const knownBrand = product.brandExamples.find(
+          (b) => BRAND_FORM_DEFAULTS[b.toLowerCase()]
+        );
         f = knownBrand ? BRAND_FORM_DEFAULTS[knownBrand.toLowerCase()] : "Tablet";
       }
     }
   }
 
-  // 2. Marka Bazlı Zorunlu Form (Örn: Majezik = Tablet)
   for (const brand in BRAND_FORM_DEFAULTS) {
-    if (product.brandExamples.some(b => b.toLowerCase().includes(brand.toLowerCase()))) {
-      // Eğer semptom sistemik bir etki gerektiriyorsa veya pediatric marka tespit edildiyse varsayılan formu kullan
-      if (s.includes("baş ağrısı") || s.includes("ateş") || s.includes("regl") || s.includes("diş") || s.includes("halsizlik")) {
+    if (
+      product.brandExamples.some((b) => b.toLowerCase().includes(brand.toLowerCase()))
+    ) {
+      if (
+        s.includes("baş ağrısı") ||
+        s.includes("ateş") ||
+        s.includes("regl") ||
+        s.includes("diş") ||
+        s.includes("halsizlik")
+      ) {
         f = BRAND_FORM_DEFAULTS[brand];
       }
     }
   }
 
-  // 3. Kullanım Metni (Natural Language Fix)
   const lowerF = f.toLowerCase();
   if (lowerF.includes("tablet") || lowerF.includes("kapsül")) {
     if (!use.toLowerCase().includes("tablet") && !use.toLowerCase().includes("yutulur")) {
-       use = "Günde 1-2 tablet, tok karnına bol su ile yutulur.";
+      // ─── Doz güvenliği: Spesifik mg/frekans yazmıyoruz ───────────────────────
+      use = "Prospektüste belirtilen yetişkin dozuna göre, tok karnına bol su ile yutulur.";
     }
   } else if (lowerF.includes("krem") || lowerF.includes("jel")) {
     if (!use.toLowerCase().includes("tabaka")) {
-       use = "Ağrılı bölgeye ince bir tabaka halinde, hafif masaj yaparak uygulanır.";
-    }
-  } else if (lowerF.includes("şurup")) {
-    if (!use.toLowerCase().includes("ölçek")) {
-       use = "Doktorun önerdiği ölçekte, tok karnına ağız yoluyla alınır.";
+      use = "Ağrılı bölgeye ince bir tabaka halinde, hafif masaj yaparak uygulanır.";
     }
   }
 
   return { ...product, form: f, typicalUse: use };
 }
 
-
-function symptomProductHeadline(p: { activeIngredient: string; brandExamples: string[]; name?: string }) {
+function symptomProductHeadline(p: {
+  activeIngredient: string;
+  brandExamples: string[];
+  name?: string;
+}) {
   const ingredient = (p.activeIngredient || p.name || "").trim() || "—";
   const brands = p.brandExamples.filter(Boolean);
-  const brandPart = brands.length > 0 ? brands.join(", ") : "eczacınıza danışın";
+  const brandPart =
+    brands.length > 0 ? brands.join(", ") : "eczacınıza danışın";
   return `${ingredient} içeren ürünler (Örn: ${brandPart})`;
 }
 
 export async function analyzeMedicine(userText: string): Promise<MedicineResult> {
-  // ─── Cache: önce Supabase'e bak ──────────────────────────────────────────────
   const cacheKey = `medicine:${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<MedicineResult>(cacheKey);
   if (cached) {
@@ -211,7 +210,6 @@ export async function analyzeMedicine(userText: string): Promise<MedicineResult>
     return cached;
   }
   console.log(`[Cache MISS] ${cacheKey} → Groq API çağrılıyor`);
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const prompt = `
 Kullanıcıdan gelen ilaç adını analiz et: "${userText}"
@@ -226,46 +224,58 @@ JSON şeması:
   "warnings": ["string", "string", "string"],
   "sensitivityWarnings": ["string", "string"],
   "summary": "string",
-  "disclaimer": "string",
-  "userExperiences": ["string", "string", "string"]
+  "disclaimer": "string"
 }
 
- Kurallar:
+Kurallar:
 - Dil: Türkçe.
-- YETİŞKİN ODAKLI ANALİZ: Medoki sadece yetişkinler içindir. Tüm ilaç formlarını 'Tablet, Kapsül, Draje' gibi yetişkin formlarında ver. ASLA şurup, likit veya süspansiyon gibi pediatrik formlar önerme. Calpol/Dolven gibi çocuk markaları yerine Parol/Advil/Arveles gibi yetişkin muadillerini öner.
-- İlaçların formlarını ve kullanım şekillerini piyasadaki gerçek halleriyle %100 uyumlu olacak şekilde ver. Örneğin, 'Majezik' gibi sistemik ağrı kesiciler için varsayılan formu krem değil 'Tablet' olarak ele al.
-- Semptom-Form Uyumu: Kullanıcının şikayeti ile ilacın veriliş yolu (oral, topikal vb.) tıbbi olarak mantıklı bir bütün oluşturmalıdır. Baş ağrısı, ateş ve halsizlik için KESİNLİKLE krem/jel önerme. Oral (Tablet) formuna zorla.
-- ÖNEMLİ: correctedTerm alanında ilaç adının (ticari marka) EN YANINA parantez içinde ilacın ETKEN MADDESİNİ EKLE (örn: 'Majezik (Flurbiprofen)', 'Parol (Parasetamol)', 'Aferin (Parasetamol & Klorfeniramin)', 'Arveles (Deksketoprofen)'). Eğer vitaminse vb. 'D Vitamini (Kolekalsiferol)' şeklinde göster. Sadece ticari ad yazma, parantez içinde etken madde olması ZORUNLUDUR!
-- Kullanıcının girdiği metindeki bariz yazım hatalarını veya argoları otomatik olarak doğru tıbbi terime çevir.
-- Summary ve diğer açıklamalarda marka adını kullanarak kullanıcı dostu yaz; teknik detaylar parantez içinde veya notlarda yer alabilir.
-- Bilimsel doğruluk öncelikli, ama sade ve anlaşılır yaz. İlaç pediatrik ise (örn. Calpol, Dolven, Ibufen), summary alanına mutlaka net bir hatırlatma ekle: 'Pediatrik dozlar çocuğun kilosuna göre doktor tarafından belirlenmelidir.'
-- Eğer sorgulanan ürün bir vitamin veya takviye ise (örn. Magnezyum, D Vitamini, Omega-3), summary alanına mutlaka şu notu ekle: 'Takviyeler dengeli bir beslenmenin yerine geçmez ve gözetim altında kullanılmalıdır.'
-- Emin olmadığın bilgi varsa "Prospektüste doğrulayın" gibi net uyarı ekle.
-- Reçete önerme; sadece genel bilgilendirme yap.
-- sensitivityWarnings: İlacın içeriğindeki yaygın alerjenleri (Gluten, Laktoz, Nişasta, Yapay Boyalar) ve hayvansal kaynaklı içerikleri (domuz/sığır enzimleri, jelatin vb.) vegan/vejetaryenler için tara. Bulursan her birini en başa '⚠️' emojisi koyarak kısa bir açıklamayla yaz. Bulamazsan boş liste dön.
-- userExperiences: İnternet forumları ve kullanıcı yorumlarında bu ilaçla ilişkilendirilen yaygın temaları 3 kısa maddeyle özetle.`.trim();
+- YETİŞKİN ODAKLI ANALİZ: Tüm ilaç formlarını 'Tablet, Kapsül, Draje' gibi yetişkin formlarında ver.
+- ASLA şurup, likit veya süspansiyon gibi pediatrik formlar önerme.
+- ÖNEMLİ DÖZAJ KURALI: dosage alanına KESİNLİKLE spesifik mg miktarı veya günlük frekans yazma.
+  Sadece şunu yaz: "Doz bilgisi için prospektüsü veya eczacınızı kontrol edin."
+  Forma ilişkin genel bilgi (tablet, kapsül) ekleyebilirsin ama sayı YASAK.
+- correctedTerm: 'BrandName (ActiveIngredient)' formatında döndür.
+- summary: Kullanıcı dostu, sade Türkçe yaz.
+- sensitivityWarnings: Yaygın alerjenleri ve hayvansal içerikleri tara, '⚠️' ile başlat.
+- disclaimer: Her zaman şunu içersin: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez. İlaç kullanmadan önce mutlaka prospektüsü okuyun."
+- Emin olmadığın bilgide "Prospektüste doğrulayın" yaz.
+- Reçete önerme.`.trim();
 
   const parsed = await groqJsonCompletion(prompt, 1100);
 
   const correctedTerm = parsed.correctedTerm || userText;
   const purpose = parsed.purpose || "Bilgi alınamadı.";
-  const dosage = parsed.dosage || "Bilgi alınamadı.";
+  // Doz güvenliği: Model yine de mg yazmışsa üzerine yaz
+  const rawDosage: string = parsed.dosage || "";
+  const dosage = /\d+\s*mg|\d+\s*ml|\d+\s*x/i.test(rawDosage)
+    ? "Doz bilgisi için prospektüsü veya eczacınızı kontrol edin."
+    : rawDosage || "Doz bilgisi için prospektüsü veya eczacınızı kontrol edin.";
 
   const result: MedicineResult = {
     correctedTerm,
     purpose,
     dosage,
-    sideEffects: Array.isArray(parsed.sideEffects) && parsed.sideEffects.length ? parsed.sideEffects : ["Bilgi alınamadı."],
-    warnings: Array.isArray(parsed.warnings) && parsed.warnings.length ? parsed.warnings : ["Bilgi alınamadı."],
-    sensitivityWarnings: Array.isArray(parsed.sensitivityWarnings) ? parsed.sensitivityWarnings : [],
-    summary: parsed.summary || `${correctedTerm} için hazırlanan analizde, ilacın ${purpose.toLowerCase()} amacıyla kullanıldığı ve genel olarak ${dosage.toLowerCase()} şeklinde önerildiği belirlenmiştir.`,
-    disclaimer: parsed.disclaimer || "Bu çıktı genel bilgilendirme içindir; doktor veya eczacı önerisinin yerine geçmez.",
-    userExperiences: normalizeUserExperiences(parsed.userExperiences),
+    sideEffects:
+      Array.isArray(parsed.sideEffects) && parsed.sideEffects.length
+        ? parsed.sideEffects
+        : ["Bilgi alınamadı."],
+    warnings:
+      Array.isArray(parsed.warnings) && parsed.warnings.length
+        ? parsed.warnings
+        : ["Bilgi alınamadı."],
+    sensitivityWarnings: Array.isArray(parsed.sensitivityWarnings)
+      ? parsed.sensitivityWarnings
+      : [],
+    summary:
+      parsed.summary ||
+      `${correctedTerm} için hazırlanan analizde, ilacın ${purpose.toLowerCase()} amacıyla kullanıldığı belirlenmiştir.`,
+    disclaimer:
+      "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez. İlaç kullanmadan önce mutlaka prospektüsü okuyun.",
+    // userExperiences: Model internete bağlı değil, sabit güvenli metinler kullanıyoruz
+    userExperiences: normalizeUserExperiences(null),
   };
 
-  // ─── Cache: sonucu Supabase'e kaydet (fire & forget) ─────────────────────────
   void setCachedAnalysis(cacheKey, result);
-
   return result;
 }
 
@@ -274,18 +284,14 @@ export type SymptomValidationStage = "auto_correct" | "suggestion" | "error";
 
 export interface SymptomValidation {
   stage: SymptomValidationStage;
-  /** Aşama 1: otomatik düzeltilmiş terim (direkt analiz başlat) */
   correctedTerm?: string;
-  /** Aşama 2: kullanıcıya gösterilecek öneri */
   suggestion?: string;
 }
 
 export async function validateSymptom(userText: string): Promise<SymptomValidation> {
-  // ─── Cache ───────────────────────────────────────────────────────────────────
   const cacheKey = `val_sym:${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<SymptomValidation>(cacheKey);
   if (cached) return cached;
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const prompt = `Sen katı bir tıbbi doğrulama hakemisin (AI Hakemliği).
 Kullanıcı şikayetini/semptomunu şöyle girdi: "${userText}"
@@ -293,21 +299,21 @@ Kullanıcı şikayetini/semptomunu şöyle girdi: "${userText}"
 EN ÖNEMLİ SORU: 'Bu girdi gerçek bir insan diliyle yazılmış, anlamlı bir sağlık şikayeti mi?'
 
 Zero-Tolerance Policy (Sıfır Tolerans Kuralı):
-1. Eğer yukarıdaki soruya cevabın %100 'Evet' değilse, DİREKT olarak 'error' aşamasını seç ve analizi reddet.
-2. ZORLAMA EŞLEŞTİRMEYİ YASAKLA: Eğer girdi "dsfgsdg", "asdf" gibi anlamsız sembol/harf yığınlarıysa "belki şunu demek istemiştir" diyerek YAKIN TAHMİN YAPMA. Gerçek dışı kelimelerde hiçbir analiz üretme, acımasızca reddet.
-3. LABORATUVAR verilerini (örn: "TSH", "WBC", "Hemoglobin", "B12 seviyesi") semptom analiziyle KARIŞTIRMA; bunlar şikayet değildir, direkt reddet.
-4. Yalnızca girdi tamamen geçerli bir Türkçe tıbbi semptom veya ÇOK bariz küçük bir harf hatasına sahip anlamlı bir insani ifadeyse "valid" seç. (Örn: "baş ağrsı" -> "Baş Ağrısı" geçerlidir, "bqz ağrısı" -> REDDET).
+1. Eğer yukarıdaki soruya cevabın %100 'Evet' değilse, DİREKT olarak 'error' aşamasını seç.
+2. ZORLAMA EŞLEŞTİRMEYİ YASAKLA: "dsfgsdg", "asdf" gibi anlamsız dizilerde yakın tahmin yapma.
+3. LABORATUVAR verilerini (TSH, WBC, Hemoglobin, B12) semptom analiziyle karıştırma; reddet.
+4. Yalnızca gerçek Türkçe tıbbi semptom veya çok bariz küçük harf hatasında "valid" seç.
 
-Aşağıdaki JSON şemasına SADECE geçerli JSON döndür. Başka hiçbir şey yazma:
+Yalnızca geçerli JSON döndür:
 {
   "stage": "valid" | "error",
   "correctedTerm": "Geçerliyse Tıbbi Literatürdeki Adı (Başlık Büyük Harf), değilse null"
-}
-`;
+}`;
 
   try {
     const parsed = await groqJsonCompletion(prompt, 120);
-    const stage: SymptomValidationStage = parsed.stage === "valid" ? "auto_correct" : "error";
+    const stage: SymptomValidationStage =
+      parsed.stage === "valid" ? "auto_correct" : "error";
     const result: SymptomValidation = {
       stage,
       correctedTerm: parsed.correctedTerm || undefined,
@@ -315,32 +321,24 @@ Aşağıdaki JSON şemasına SADECE geçerli JSON döndür. Başka hiçbir şey 
     void setCachedAnalysis(cacheKey, result);
     return result;
   } catch {
-    // Fail-closed! Hatayı gizleme, analiz yapmasına izin verme, anlamsız girişleri reddet.
     return { stage: "error" };
   }
 }
-// ──────────────────────────────────────────────────────────────────────────────
 
 export async function analyzeSymptom(userText: string): Promise<SymptomResult> {
-  // ─── RED FLAG PROTOCOL (Kod Katmanı) ───────────────────────────────────────
-  // Hayati tehlike taşıyan semptomlar tespit edilirse AI çağrılmaz,
-  // kullanıcı doğrudan acil servise yönlendirilir.
+  // ─── RED FLAG PROTOCOL ────────────────────────────────────────────────────────
   const RED_FLAG_KEYWORDS = [
-    // Göğüs & Kalp
     "göğüs ağrısı", "gogus agrisi", "gögüs ağrısı", "göğüs sıkışması",
     "kalp krizi", "kalp ağrısı", "kalp çarpıntısı", "çarpıntı",
     "nefes darlığı", "nefes alamıyorum", "nefes alamiyorum",
-    // Bilinç & Nöroloji
     "bilinç kaybı", "bayılma", "baygınlık", "bayıldım", "baygın",
     "felç", "inme", "uyuşma yüz", "konuşamıyorum", "konusamiyorum",
-    // Ciddi karın & İç organ ağrısı
     "şiddetli karın ağrısı", "siddetli karin agrisi", "ani karın ağrısı",
-    // Ciddi kanama & Diğer aciller
     "ciddi kanama", "kanlı idrar", "kan kusma", "kan kusuyor",
   ];
 
   const normalizedInput = userText.toLowerCase().trim();
-  const isRedFlag = RED_FLAG_KEYWORDS.some(kw => normalizedInput.includes(kw));
+  const isRedFlag = RED_FLAG_KEYWORDS.some((kw) => normalizedInput.includes(kw));
 
   if (isRedFlag) {
     const warning = `KRİTİK UYARI: "${userText}" gibi belirtiler ciddi bir sağlık sorununun (örn: kalp krizi, felç) işareti olabilir. Lütfen hiçbir ilaç kullanmadan DERHAL 112 Acil Çağrı Merkezi'ni arayın veya en yakın acil servise başvurun.`;
@@ -348,15 +346,19 @@ export async function analyzeSymptom(userText: string): Promise<SymptomResult> {
       correctedTerm: userText,
       intro: warning,
       products: [],
-      generalTips: ["Belirtiler geçmeden hareket etmeyin, yere oturun veya uzanın.", "Yanınızdaki birinden 112'yi aramasını isteyin.", "Herhangi bir ilaç veya yiyecek almayın."],
+      generalTips: [
+        "Belirtiler geçmeden hareket etmeyin, yere oturun veya uzanın.",
+        "Yanınızdaki birinden 112'yi aramasını isteyin.",
+        "Herhangi bir ilaç veya yiyecek almayın.",
+      ],
       whenToSeeDoctor: ["DERHAL 112'yi arayın veya en yakın acil servise gidin."],
-      disclaimer: "Bu mesaj otomatik bir güvenlik uyarısıdır. Lütfen tıbbi acil durumda zaman kaybetmeden yardım isteyin.",
+      disclaimer:
+        "Bu mesaj otomatik bir güvenlik uyarısıdır. Lütfen tıbbi acil durumda zaman kaybetmeden yardım isteyin.",
       userExperiences: [],
     };
   }
-  // ──────────────────────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────────────────────────
 
-  // ─── Cache: red flag değilse önce Supabase'e bak ──────────────────────────────
   const cacheKey = `symptom:${normalizedInput}`;
   const cached = await getCachedAnalysis<SymptomResult>(cacheKey);
   if (cached) {
@@ -364,33 +366,18 @@ export async function analyzeSymptom(userText: string): Promise<SymptomResult> {
     return cached;
   }
   console.log(`[Cache MISS] ${cacheKey} → Groq API çağrılıyor`);
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const prompt = `
 Kullanıcının şikayeti / semptomu: "${userText}"
 
-⚠️ RED FLAG PROTOKOLÜ (AI Katmanı — En Yüksek Öncelik):
-Eğer kullanıcının semptomu şunlardan herhangi birini içeriyorsa ASLA ilaç önerme:
-  → Göğüs ağrısı, göğüs sıkışması, kalp krizi şüphesi
-  → Nefes darlığı, nefes alamama
-  → Kalp çarpıntısı (şiddetli veya ani başlangıçlı)
-  → Bilinç kaybı, bayılma, felç belirtisi (yüzde uyuşma, konuşamama)
-  → Şiddetli/ani karın ağrısı (iç organ hasarı riski)
-Bu semptomlarda products dizisini BOŞ bırak ve intro alanına şunu yaz:
-"KRİTİK UYARI: Bu belirtiler ciddi bir sağlık sorununun işareti olabilir. Hiçbir ilaç kullanmadan DERHAL 112'yi arayın veya en yakın acil servise başvurun."
+⚠️ RED FLAG PROTOKOLÜ (AI Katmanı):
+Göğüs ağrısı, nefes darlığı, kalp krizi şüphesi, bilinç kaybı, felç belirtisi,
+şiddetli/ani karın ağrısı → products dizisini BOŞ bırak, intro'ya acil yönlendirme yaz.
 
-Bu semptoma yönelik yalnızca reçetesiz (OTC) seçenekler öner. Reçeteli ilaç, antibiyotik veya kontrollü madde önerme.
-Her öneride yalnızca etken madde adını tek başına yazma: Türkiye'de eczanede en yaygın bilinen ticari marka örneklerini de ver.
+Bu semptoma yönelik SADECE reçetesiz (OTC) seçenekler öner.
+Reçeteli ilaç, antibiyotik veya kontrollü madde ÖNERME.
 
-Semptomu dikkatlice analiz et ve sadece o semptomu doğrudan hedefleyen, spesifik OTC seçeneklerini öner.
-Her şikayete tembelce Parasetamol veya İbuprofen önerme; semptomun doğasına uygun çözümleri önceliklendir:
-- Mide/sindirim şikayetlerinde antiasit, H2 blokör veya probiyotik öner (bu kategoride NSAİİ'ler mideye zarar verir, önerme).
-- Kas/eklem/bel ağrılarında topikal jel, krem veya ısıtıcı bant gibi lokal çözümleri önce sırala.
-- Boğaz ağrısı ve soğuk algınlığında pastil, boğaz spreyi veya deniz suyu spreyi gibi semptoma özgü ürünleri öner.
-- Alerji/cilt şikayetlerinde antihistaminik jel, yatıştırıcı krem gibi topikal seçenekleri öne çıkar.
-- Gerçek anlamda ağrı veya ateş eşlik ediyorsa Parasetamol ya da İbuprofen ekleyebilirsin, ancak bunların listede tek seçenek olmamasına dikkat et.
-
-Aşağıdaki JSON şemasına tam uygun şekilde yanıt ver. Yalnızca geçerli JSON döndür, markdown veya code block kullanma:
+Aşağıdaki JSON şemasına tam uygun şekilde yanıt ver. Yalnızca geçerli JSON döndür:
 {
   "correctedTerm": "string",
   "intro": "string",
@@ -406,22 +393,18 @@ Aşağıdaki JSON şemasına tam uygun şekilde yanıt ver. Yalnızca geçerli J
   ],
   "generalTips": ["string", "string", "string"],
   "whenToSeeDoctor": ["string", "string", "string"],
-  "disclaimer": "string",
-  "userExperiences": ["string", "string", "string"]
+  "disclaimer": "string"
 }
 
 Kurallar:
 - Dil: Türkçe.
-- YETİŞKİN ODAKLI ÖNERİ: Medoki sadece yetişkinler içindir. Tüm önerileri yetişkinlere özel Tablet/Kapsül dozajlarında ver. ASLA şurup veya pediatrik formlar önerme.
-- Kullanıcının şikayeti ile ilacın veriliş yolu (oral, topikal, sprey vb.) tıbbi olarak mantıklı bir bütün oluşturmalıdır. Baş ağrısı, ateş ve halsizlik gibi sistematik durumlarda KESİNLİKLE krem/jel/şurup önerme. Sadece oral Tablet/Kapsül öner.
-- Lokal Şikayetler: Sadece kas ağrısı, burkulma ve eklem ağrısı gibi lokal durumlarda krem/jel önerisine izin verilir.
-- ÖNEMLİ: correctedTerm alanını KESİNLİKLE 'Aratılan Semptom (Semptomun Latince veya Akademik Tıbbi Karşılığı)' formatında döndür. Parantez içine ASLA bu semptoma sebep olabilecek hastalıkları (örn: Gastrit, Enfeksiyon, Migren) yazma; yalnızca şikayetin doğrudan tıbbi litaratürdeki adını (örn: 'Baş Ağrısı (Serebralji)', 'Mide Bulantısı (Nausea)', 'Ateş (Pireksi/Febris)', 'Boğaz Ağrısı (Farenjal Ağrı)') kullan. "intro" ve diğer açıklamalarda ise yalnızca Türkçe semptom adını kullan.
-- 3 ila 5 arası ürün öner.
-- Her products öğesinde activeIngredient ve brandExamples (en az 2 marka) zorunlu.
-- form alanı son derece net olsun ve önerilen ilaçların piyasadaki gerçek satış formlarıyla (örn: Majezik = Tablet) birebir eşleşmesini sağla. Hap/tablet olan bir ilaca uydurma şekilde 'Krem' veya 'Jel' yazmaktan KESİNLİKLE kaçın.
-- typicalUse metni doğal olsun: Yetişkin dozajlarını baz alarak "günde x tablet" gibi gerçekçi ifadeler kullan.
-- Hamilelik, kronik hastalık, çocuk, alerji gibi durumlarda mutlaka eczacı/doktor uyarısı yaz.
-- userExperiences: Bu semptom veya önerilen OTC ürünlerle ilgili internetteki kullanıcı yorumlarında geçen yaygın temaları 3 kısa maddeyle özetle.`.trim();
+- YETİŞKİN ODAKLI: ASLA şurup veya pediatrik form önerme.
+- DÖZAJ KURALI: typicalUse alanına KESİNLİKLE spesifik mg veya günlük frekans yazma.
+  Şunu yaz: "Prospektüste belirtilen yetişkin dozuna göre kullanın."
+- correctedTerm: 'Semptom (Tıbbi Karşılığı)' formatında döndür.
+- 3 ila 5 ürün öner.
+- Mide/sindirim şikayetlerinde NSAİİ önerme.
+- disclaimer: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez." içersin.`.trim();
 
   const parsed = await groqJsonCompletion(prompt, 1600);
   const products = Array.isArray(parsed.products) ? parsed.products : [];
@@ -429,50 +412,62 @@ Kurallar:
   const correctedTerm = parsed.correctedTerm || userText;
   const result: SymptomResult = {
     correctedTerm,
-    intro: parsed.intro || `${correctedTerm} şikayeti için değerlendirme sonuçları ve öneriler aşağıda listelenmiştir.`,
+    intro:
+      parsed.intro ||
+      `${correctedTerm} şikayeti için değerlendirme sonuçları aşağıda listelenmiştir.`,
     products: products.map((p: any) => {
       const activeIngredient = (p.activeIngredient || p.name || "").trim();
-      const brandExamples = Array.isArray(p.brandExamples) ? p.brandExamples.map((b: string) => String(b).trim()).filter(Boolean) : [];
-      const baseProduct = {
+      const brandExamples = Array.isArray(p.brandExamples)
+        ? p.brandExamples.map((b: string) => String(b).trim()).filter(Boolean)
+        : [];
+      // typicalUse doz güvenliği: spesifik mg/frekans varsa üzerine yaz
+      const rawUse: string = p.typicalUse || "";
+      const safeUse = /\d+\s*mg|\d+\s*ml|\d+\s*x|\d+\s*tablet/i.test(rawUse)
+        ? "Prospektüste belirtilen yetişkin dozuna göre kullanın."
+        : rawUse;
+      const baseProduct: SymptomProduct = {
         activeIngredient,
         brandExamples,
         labelLine: symptomProductHeadline({ activeIngredient, brandExamples, name: p.name }),
         form: p.form || "",
         whyItHelps: p.whyItHelps || "",
-        typicalUse: p.typicalUse || "",
+        typicalUse: safeUse,
         cautions: Array.isArray(p.cautions) ? p.cautions : [],
       };
-      // PharmacyGuard ile tıbbi mantık kontrolü ve form düzeltmesi yap
       return applyPharmacyGuard(baseProduct, userText);
     }),
-    generalTips: Array.isArray(parsed.generalTips) && parsed.generalTips.length ? parsed.generalTips : ["Genel öneri alınamadı; eczacınıza danışın."],
-    whenToSeeDoctor: Array.isArray(parsed.whenToSeeDoctor) && parsed.whenToSeeDoctor.length ? parsed.whenToSeeDoctor : ["Belirtiler şiddetlenirse veya uzun sürerse doktora başvurun."],
-    disclaimer: parsed.disclaimer || "Bu çıktı genel bilgilendirme içindir; teşhis veya tedavi yerine geçmez.",
-    userExperiences: normalizeUserExperiences(parsed.userExperiences),
+    generalTips:
+      Array.isArray(parsed.generalTips) && parsed.generalTips.length
+        ? parsed.generalTips
+        : ["Genel öneri alınamadı; eczacınıza danışın."],
+    whenToSeeDoctor:
+      Array.isArray(parsed.whenToSeeDoctor) && parsed.whenToSeeDoctor.length
+        ? parsed.whenToSeeDoctor
+        : ["Belirtiler şiddetlenirse veya uzun sürerse doktora başvurun."],
+    disclaimer:
+      "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez. İlaç kullanmadan önce mutlaka prospektüsü okuyun.",
+    // userExperiences: Sabit güvenli metinler (model internete bağlı değil)
+    userExperiences: normalizeUserExperiences(null),
   };
 
-  // ─── Cache: sonucu Supabase'e kaydet (fire & forget) ─────────────────────────
   void setCachedAnalysis(cacheKey, result);
-
   return result;
 }
 
 export async function checkTypo(userText: string): Promise<string | null> {
   if (!userText || userText.length < 3) return null;
 
-  // ─── Cache ───────────────────────────────────────────────────────────────────
   const cacheKey = `typo:${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<string | null>(cacheKey);
   if (cached !== null && cached !== undefined) return cached;
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const prompt = `Kullanıcı şu tıbbi terimi/ilacı arattı: "${userText}".
-Yalnızca geçerli JSON döndür. Eğer kelimede bariz bir harf/yazım hatası varsa düzeltilmiş onaylı halini "suggestion" alanına yaz. Eğer hata yoksa veya emin değilsen "suggestion" alanını null bırak.
+Yalnızca geçerli JSON döndür. Eğer kelimede bariz bir harf/yazım hatası varsa düzeltilmiş halini "suggestion" alanına yaz. Eğer hata yoksa veya emin değilsen "suggestion" alanını null bırak.
 ÖNEMLİ KURALLAR:
-1. SÖZLÜK KONTROLÜ: Öneri yaparken sadece GERÇEK (piyasada var olan veya tıbben anlamlı) kelimeleri referans al. Kullanıcının girdiği saçma veya uydurma bir kelimeyi (örn: 'göpüs') asla 'göpüs' diye önerme.
-2. EŞİK DEĞERİ: Girdi, önereceğin kelimeyle %80-90 oranında kelime, klavye ve görünüm olarak uyuşmuyorsa (veya önerilen kelimedeki asıl kök harflerle ilgisi yoksa) O ÖNERİYİ ELE (null dön).
-3. EĞER GİRDİ ZATEN DOĞRU YAZILMIŞ BİR İLAÇ İSE (örn: "Majezik", "Parol", "Aferin"): Asla hata uydurma, asla benzer isimli başka bir ilaç önerme! Direkt "suggestion": null olarak dön!
-4. TİCARİ MARKA - ETKEN MADDE İLİŞKİSİ YASAKTIR: Kullanıcı ticari bir marka adı yazdıysa (örn: Majezik), sakın etken maddesini (Flurbiprofen) bir düzeltme olarak önerme. Tam tersi de geçerli. Parantez veya ek bilgi açma, sadece "suggestion": null dön. Düzeltme (suggestion) SADECE bariz harf hatalarında geçerlidir (örn: "mazjezik" -> "Majezik").
+1. Öneri yaparken sadece GERÇEK (piyasada var olan) kelimeleri referans al.
+2. Girdi, önereceğin kelimeyle %80-90 oranında uyuşmuyorsa null dön.
+3. Girdi zaten doğru yazılmış bir ilaç isiyse (Majezik, Parol, Aferin): null dön.
+4. TİCARİ MARKA - ETKEN MADDE dönüşümü YASAK: "Majezik" → "Flurbiprofen" gibi öneri yapma.
 JSON şeması:
 {
   "suggestion": "düzeltilmiş kelime veya null"
@@ -481,7 +476,7 @@ JSON şeması:
     const parsed = await groqJsonCompletion(prompt, 50);
     let result = parsed.suggestion || null;
     if (result && !isLegitTypo(userText, result)) {
-      result = null; // AI marka adı ile etken maddeyi karıştırmış, reddet.
+      result = null;
     }
     void setCachedAnalysis(cacheKey, result);
     return result;
@@ -498,16 +493,14 @@ export interface MedicineValidation {
 }
 
 export async function validateMedicine(userText: string): Promise<MedicineValidation> {
-  // ─── Cache ───────────────────────────────────────────────────────────────────
   const cacheKey = `val_med:${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<MedicineValidation>(cacheKey);
   if (cached) return cached;
-  // ─────────────────────────────────────────────────────────────────────────────
 
   const prompt = `Sen Türkiye'deki eczanelere ve tıp literatürüne son derece hakim bir uzmansın.
 Kullanıcı şu metni girdi: "${userText}"
 
-Önce girdinin ne olduğuna karar ver, sonra JSON üret. Yalnızca geçerli JSON döndür, başka hiçbir şey yazma:
+Yalnızca geçerli JSON döndür:
 {
   "inputType": "medicine" | "symptom" | "invalid",
   "isValid": boolean,
@@ -517,48 +510,19 @@ Kullanıcı şu metni girdi: "${userText}"
 }
 
 ━━━ inputType nasıl belirlenir ━━━
-
-"medicine" → İlaç ticari adı (Parol, Arveles, Majezik, Calpol, Ibufen, Augmentin, Xanax, vb.),
-              etken madde adı (İbuprofen, Parasetamol, Amoksisilin, vb.),
-              vitamin/takviye adı (D Vitamini, Magnezyum, Omega-3, vb.).
-
-"symptom"  → Kullanıcının hissettiği fiziksel şikayet veya belirti:
-              Baş ağrısı, mide bulantısı, ateş, öksürük, regl ağrısı, karın ağrısı,
-              boğaz ağrısı, burun akıntısı, ishal, kabızlık, baş dönmesi, vb.
-              KURAL: Girdi bir semptom/şikayet ise isSymptom: true, isValid: false, isTypo: false, suggestion: null döndür.
-
-"invalid"  → Tamamen anlamsız, rastgele karakter dizisi (örn: "asdfg", "vzka skaa") veya LABORATUVAR/KAN DEĞERİ (örn: "TSH", "Hemoglobin", "WBC"). Bunlar ilaç/takviye değildir.
+"medicine" → İlaç ticari adı, etken madde adı, vitamin/takviye adı.
+"symptom"  → Fiziksel şikayet: baş ağrısı, mide bulantısı, ateş vb. → isSymptom:true, isValid:false, suggestion:null
+"invalid"  → Anlamsız karakter dizisi veya LAB değeri (TSH, WBC, Hemoglobin) → isValid:false
 
 ━━━ Diğer alanlar ━━━
+isValid: inputType "medicine" ve yazım hatası yoksa true.
+isTypo: SADECE bariz HARF HATASI varsa true. Marka ↔ etken madde dönüşümü YASAK.
+suggestion: isTypo:true ise düzeltilmiş ilaç adı, aksi halde null.
 
-isValid:
-  - inputType "medicine" ise → isValid: true (ilaç adı geçerli ve yazım hatası yok).
-  - inputType "medicine" ama yazım hatası varsa → isValid: false, isTypo: true.
-  - inputType "symptom" veya "invalid" → isValid: false.
-
-isTypo:
-  - Sadece inputType "medicine" olan bir girdide HARF/YAZIM hatası varsa true.
-  - ÖNERİ SAĞLAMASI: Suggestion alanına yazdığın kelime KESİNLİKLE gerçek bir ilaç/terim olmalı.
-  - KESİN KURAL: Marka adını etken maddeyle (veya tam tersi) GÜNCELLEMEYE ÇALIŞMA! Eğer kullanıcı "Majezik" girdiyse, suggestion olarak "Flurbiprofen" YAZMA. Eğer kullanıcı "Flurbiprofen" girdiyse "Majezik" YAZMA. Bunlar yazım hatası değildir, isTypo: false ve suggestion: null olarak dön. 
-  - Yalnızca "Macezik" → "Majezik" veya "Parool" → "Parol" gibi BARİZ HARF HATALARINDA isTypo: true ve suggestion: düzeltilmiş_hali dön.
-  - isSymptom: true ise isTypo kesinlikle false olmalı.
-
-suggestion:
-  - isTypo: true ise ve %100 eminsen, doğru ilaç adını yaz.
-  - Diğer tüm durumlarda null.
-
-━━━ Örnekler ━━━
-  "Majezik"      → inputType:"medicine", isValid:true,  isTypo:false, isSymptom:false, suggestion:null
-  "Flurbiprofen" → inputType:"medicine", isValid:true,  isTypo:false, isSymptom:false, suggestion:null
-  "Parol"        → inputType:"medicine", isValid:true,  isTypo:false, isSymptom:false, suggestion:null
-  "Aferin"       → inputType:"medicine", isValid:true,  isTypo:false, isSymptom:false, suggestion:null
-  "aferi"        → inputType:"medicine", isValid:false, isTypo:true,  isSymptom:false, suggestion:"Aferin"
-  "Macezik"      → inputType:"medicine", isValid:false, isTypo:true,  isSymptom:false, suggestion:"Majezik"
-  "baş ağrısı"   → inputType:"symptom",  isValid:false, isTypo:false, isSymptom:true,  suggestion:null
-  "mide bulantısı" → inputType:"symptom",isValid:false, isTypo:false, isSymptom:true,  suggestion:null
-  "ateş"         → inputType:"symptom",  isValid:false, isTypo:false, isSymptom:true,  suggestion:null
-  "D Vitamini"   → inputType:"medicine", isValid:true,  isTypo:false, isSymptom:false, suggestion:null
-  "asdfg"        → inputType:"invalid",  isValid:false, isTypo:false, isSymptom:false, suggestion:null`;
+Örnekler:
+"Majezik" → inputType:"medicine", isValid:true, isTypo:false, isSymptom:false, suggestion:null
+"baş ağrısı" → inputType:"symptom", isValid:false, isTypo:false, isSymptom:true, suggestion:null
+"asdfg" → inputType:"invalid", isValid:false, isTypo:false, isSymptom:false, suggestion:null`;
 
   try {
     const parsed = await groqJsonCompletion(prompt, 150);
@@ -570,10 +534,8 @@ suggestion:
     };
 
     if (result.isTypo && result.suggestion && !isLegitTypo(userText, result.suggestion)) {
-      // AI marka/etken maddeyi birbirine dönüştürmeye çalışmış
       result.isTypo = false;
       result.suggestion = null;
-      // Zaten birini diğerine çevirmeye çalıştıysa girdi tıbbi olarak geçerlidir.
       result.isValid = true;
     }
 
