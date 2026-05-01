@@ -18,7 +18,72 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
   if (!API_KEY) {
     throw new Error("API anahtarı bulunamadı. VITE_GROQ_API_KEY tanımlı olmalı.");
   }
+export async function recognizeMedicineFromImage(
+  base64Image: string,
+  mimeType: "image/jpeg" | "image/png" | "image/webp" = "image/jpeg"
+): Promise<{ medicineName: string | null; confidence: "high" | "low" | "none" }> {
+  if (!API_KEY) throw new Error("API anahtarı bulunamadı.");
 
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.2-11b-vision-preview", // Groq'un vision modeli
+      temperature: 0.1,
+      max_tokens: 150,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "image_url",
+              image_url: {
+                url: `data:${mimeType};base64,${base64Image}`,
+              },
+            },
+            {
+              type: "text",
+              text: `Bu görüntüde bir ilaç kutusu, blister veya ilaç ambalajı var mı?
+Varsa yalnızca şu JSON formatında yanıt ver, başka hiçbir şey yazma:
+{
+  "medicineName": "İlacın ticari adı (Türkçe, tam ve doğru)",
+  "confidence": "high" | "low" | "none"
+}
+
+Kurallar:
+- Eğer ilaç adını net okuyabiliyorsan confidence: "high"
+- Eğer kısmen görünüyorsa confidence: "low"  
+- Eğer görüntüde ilaç yoksa veya okuyamıyorsan medicineName: null, confidence: "none"
+- ASLA tahmin yürütme veya uydurmayacaksın — emin değilsen "none" seç
+- Sadece ilaç ticari adını yaz, açıklama ekleme`,
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Groq Vision hatası (${response.status}): ${err}`);
+  }
+
+  const data = await response.json();
+  const rawText = data?.choices?.[0]?.message?.content || "";
+
+  try {
+    const parsed = JSON.parse(stripCodeFences(rawText).trim());
+    return {
+      medicineName: parsed.medicineName || null,
+      confidence: parsed.confidence || "none",
+    };
+  } catch {
+    return { medicineName: null, confidence: "none" };
+  }
+}
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
