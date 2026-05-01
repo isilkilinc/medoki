@@ -97,6 +97,12 @@ const translations: Translations = {
   "profile.unknown": { tr: "Bilinmiyor", en: "Unknown" },
   "profile.login_required": { tr: "Sağlık bilgilerinizi kaydetmek ve kişisel profilinizi görmek için giriş yapın.", en: "Log in to save your health information and view your personal profile." },
   "profile.profile": { tr: "Profil", en: "Profile" },
+  "profile.login_signup": { tr: "Giriş Yap / Kayıt Ol", en: "Log In / Sign Up" },
+  "profile.email_placeholder": { tr: "E-posta adresiniz", en: "Your email address" },
+  "profile.password_placeholder": { tr: "Şifreniz", en: "Your password" },
+  "profile.login": { tr: "Giriş Yap", en: "Log In" },
+  "profile.no_account": { tr: "Henüz hesabın yok mu?", en: "Don't have an account yet?" },
+  "profile.signup": { tr: "Kayıt Ol", en: "Sign Up" },
 
   // SearchScreen
   "search.placeholder": { tr: "İlaç veya semptom ara...", en: "Search medicine or symptom..." },
@@ -111,12 +117,6 @@ const translations: Translations = {
   "scan.button": { tr: "Tanımla", en: "Scan" },
   "scan.close": { tr: "Kapat", en: "Close" },
   "scan.analyzing": { tr: "Taranıyor...", en: "Scanning..." },
-  "profile.login_signup": { tr: "Giriş Yap / Kayıt Ol", en: "Log In / Sign Up" },
-  "profile.email_placeholder": { tr: "E-posta adresiniz", en: "Your email address" },
-  "profile.password_placeholder": { tr: "Şifreniz", en: "Your password" },
-  "profile.login": { tr: "Giriş Yap", en: "Log In" },
-  "profile.no_account": { tr: "Henüz hesabın yok mu?", en: "Don't have an account yet?" },
-  "profile.signup": { tr: "Kayıt Ol", en: "Sign Up" },
 
   // ResultsScreen
   "results.back": { tr: "Geri", en: "Back" },
@@ -126,9 +126,24 @@ const translations: Translations = {
   "results.copy_failed": { tr: "Kopyalama yapılamadı.", en: "Copy failed." },
   "results.share_fallback": { tr: "Paylaşım bu cihazda yok; özet panoya kopyalandı.", en: "Sharing not supported; summary copied to clipboard." },
   "results.error": { tr: "Beklenmeyen bir hata oluştu.", en: "An unexpected error occurred." },
-  
+
   // Index loading
-  "index.analyzing": { tr: "Analiz ediliyor...", en: "Analyzing..." }
+  "index.analyzing": { tr: "Analiz ediliyor...", en: "Analyzing..." },
+
+  // InteractionChecker
+  "interaction.title": { tr: "İlaç Etkileşim Kontrolü", en: "Drug Interaction Checker" },
+  "interaction.desc": { tr: "Birlikte kullandığınız ilaçları girin, olası etkileşimleri analiz edelim.", en: "Enter the medicines you use together, let's analyze possible interactions." },
+  "interaction.placeholder": { tr: "{{n}}. ilaç adı (örn: Parol)", en: "Medicine {{n}} (e.g: Aspirin)" },
+  "interaction.add": { tr: "İlaç ekle (maks. 5)", en: "Add medicine (max. 5)" },
+  "interaction.button": { tr: "Etkileşimi Kontrol Et", en: "Check Interactions" },
+  "interaction.analyzing": { tr: "Analiz ediliyor...", en: "Analyzing..." },
+  "interaction.min_two": { tr: "En az 2 ilaç adı giriniz.", en: "Please enter at least 2 medicine names." },
+  "interaction.error": { tr: "Bir hata oluştu. Tekrar deneyin.", en: "An error occurred. Please try again." },
+  "interaction.severity_major": { tr: "Ciddi Etkileşim", en: "Major Interaction" },
+  "interaction.severity_moderate": { tr: "Orta Etkileşim", en: "Moderate Interaction" },
+  "interaction.severity_minor": { tr: "Hafif Etkileşim", en: "Minor Interaction" },
+  "interaction.recommendation_prefix": { tr: "Öneri", en: "Recommendation" },
+  "interaction.disclaimer": { tr: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez.", en: "This information is for general purposes only and does not replace medical advice." },
 };
 
 interface LanguageContextType {
