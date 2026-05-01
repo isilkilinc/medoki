@@ -1,4 +1,4 @@
-import { Home, Search, ScanLine, User, Settings } from "lucide-react";
+import { Home, Search, Camera, User, Settings } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 
 export type TabType = "home" | "search" | "profile" | "settings";
@@ -34,7 +34,7 @@ const BottomNav = ({ activeTab, onChangeTab, onScanClick }: BottomNavProps) => {
       aria-label={t("nav.scan")}
       onClick={onScanClick}
     >
-      <ScanLine className="w-8 h-8" />
+      <Camera className="w-8 h-8" />
     </button>
     <button 
       className={`bottom-nav-item ${activeTab === 'profile' ? 'active' : ''}`} 
