@@ -71,7 +71,7 @@ const photoInputRef = useRef<HTMLInputElement>(null);
           <input 
             ref={inputRef}
             type="text" 
-            placeholder={t("scan.placeholder")}
+            placeholder="Barkod numarası yazın"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             disabled={isScanning}
