@@ -652,7 +652,7 @@ Return only valid JSON, language of all text fields must be: ${language === "tr"
     {
       "drug1": "string",
       "drug2": "string",
-      "severity": "major" | "moderate" | "minor",
+      "severity": "major or moderate or minor",
       "description": "string",
       "recommendation": "string"
     }
