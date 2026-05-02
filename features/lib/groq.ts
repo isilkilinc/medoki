@@ -661,7 +661,7 @@ Rules:
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      model: "llama3-70b-8192",
+      model: "llama-3.3-70b-versatile",
       temperature: 0.1,
       max_tokens: 1200,
       messages: [
