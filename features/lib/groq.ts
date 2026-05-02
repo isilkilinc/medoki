@@ -615,7 +615,7 @@ export interface InteractionResult {
   pairs: {
     drug1: string;
     drug2: string;
-    "severity": "major or moderate or minor",
+    severity: "major" | "moderate" | "minor";
     description: string;
     recommendation: string;
   }[];
