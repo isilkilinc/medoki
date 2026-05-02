@@ -609,78 +609,13 @@ suggestion: isTypo:true ise düzeltilmiş ilaç adı, aksi halde null.
     return { isValid: true, isTypo: false, isSymptom: false, suggestion: null };
   }
 }
+
 export interface InteractionResult {
   hasCriticalInteraction: boolean;
   pairs: {
     drug1: string;
     drug2: string;
-    severity: "major" | "moderate" | "minor";
-    description: string;
-    recommendation: string;
-  }[];
-  generalWarning: string;
-  disclaimer: string;
-}
-
-export async function checkDrugInteractions(
-  medicines: string[]
-): Promise<InteractionResult> {
-  if (medicines.length < 2) {
-    return {
-      hasCriticalInteraction: false,
-      pairs: [],
-      generalWarning: "Etkileşim kontrolü için en az 2 ilaç giriniz.",
-      disclaimer: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez.",
-    };
-  }
-
-  const prompt = `
-Aşağıdaki ilaçlar arasındaki olası etkileşimleri analiz et:
-${medicines.map((m, i) => `${i + 1}. ${m}`).join("\n")}
-
-Yalnızca geçerli JSON döndür:
-{
-  "hasCriticalInteraction": boolean,
-  "pairs": [
-    {
-      "drug1": "string",
-      "drug2": "string", 
-      "severity": "major" | "moderate" | "minor",
-      "description": "string",
-      "recommendation": "string"
-    }
-  ],
-  "generalWarning": "string",
-  "disclaimer": "string"
-}
-
-Kurallar:
-- Dil: Türkçe.
-- Sadece gerçek ve kanıtlanmış ilaç etkileşimlerini listele. Emin olmadığın etkileşimi YAZMA.
-- severity: "major" = ciddi/hayati tehlike, "moderate" = orta düzey dikkat, "minor" = hafif
-- Etkileşim yoksa pairs dizisini BOŞ bırak, hasCriticalInteraction: false yap.
-- description: Etkileşimin ne olduğunu kısa açıkla.
-- recommendation: Kullanıcıya ne yapması gerektiğini söyle.
-- generalWarning: Genel bir özet uyarı yaz.
-- disclaimer: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez." yaz.
-- ASLA uydurma etkileşim yazma. Bilmiyorsan pairs boş dönsün.
-`.trim();
-
-  const parsed = await groqJsonCompletion(prompt, 1200);
-
-  return {
-    hasCriticalInteraction: parsed.hasCriticalInteraction === true,
-    pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
-    generalWarning: parsed.generalWarning || "Listelenen ilaçlar arasında bilinen bir etkileşim tespit edilmedi.",
-    disclaimer: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez.",
-  };
-}
-export interface InteractionResult {
-  hasCriticalInteraction: boolean;
-  pairs: {
-    drug1: string;
-    drug2: string;
-    severity: "major" | "moderate" | "minor";
+    "severity": "major or moderate or minor",
     description: string;
     recommendation: string;
   }[];
