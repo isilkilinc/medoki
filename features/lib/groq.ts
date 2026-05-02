@@ -26,8 +26,8 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      // llama3-70b-8192: 8B modeline göre ilaç bilgisinde çok daha güvenilir
-      model: "mixtral-8x7b-32768",
+      // llama-3.3-70b-versatile: 8B modeline göre ilaç bilgisinde çok daha güvenilir
+      model: "llama-3.3-70b-versatile",
       temperature: 0.1, // Düşük temperature = daha az uydurma
       max_tokens: maxTokens,
       response_format: { type: "json_object" },
