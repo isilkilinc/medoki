@@ -640,45 +640,57 @@ export async function checkDrugInteractions(
     };
   }
 
-  const prompt = `
-Analyze possible interactions between the following medicines:
-${medicines.map((m, i) => `${i + 1}. ${m}`).join("\n")}
+  const prompt = `Analyze possible interactions between these medicines: ${medicines.join(", ")}
 
-Return only valid JSON, language of all text fields must be: ${language === "tr" ? "Turkish" : "English"}
-
-{
-  "hasCriticalInteraction": boolean,
-  "pairs": [
-    {
-      "drug1": "string",
-      "drug2": "string",
-      "severity": "major or moderate or minor",
-      "description": "string",
-      "recommendation": "string"
-    }
-  ],
-  "generalWarning": "string",
-  "disclaimer": "string"
-}
+Respond in ${language === "tr" ? "Turkish" : "English"}.
+Return ONLY valid JSON, no markdown, no explanation:
+{"hasCriticalInteraction":false,"pairs":[{"drug1":"string","drug2":"string","severity":"major","description":"string","recommendation":"string"}],"generalWarning":"string","disclaimer":"string"}
 
 Rules:
-- Only list real, evidence-based drug interactions. If unsure, DO NOT include it.
-- severity: "major" = serious/life-threatening, "moderate" = moderate caution, "minor" = mild
-- If no interaction exists, return empty pairs array and hasCriticalInteraction: false.
-- NEVER fabricate interactions.
-- disclaimer must say this is general information and does not replace doctor/pharmacist advice.
-`.trim();
+- Only include real evidence-based interactions
+- severity must be exactly one of: major, moderate, minor
+- If no interaction exists, return empty pairs array
+- Never fabricate interactions`;
 
-  const parsed = await groqJsonCompletion(prompt, 1200);
+  if (!API_KEY) throw new Error("API anahtarı bulunamadı.");
 
-  return {
-    hasCriticalInteraction: parsed.hasCriticalInteraction === true,
-    pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
-    generalWarning: parsed.generalWarning || (language === "tr"
-      ? "Listelenen ilaçlar arasında bilinen bir etkileşim tespit edilmedi."
-      : "No known interaction detected between the listed medicines."),
-    disclaimer: language === "tr"
-      ? "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez."
-      : "This information is for general purposes only and does not replace medical advice.",
-  };
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "llama3-70b-8192",
+      temperature: 0.1,
+      max_tokens: 1200,
+      messages: [
+        { role: "user", content: prompt }
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Groq hatası (${response.status}): ${err}`);
+  }
+
+  const data = await response.json();
+  const rawText = data?.choices?.[0]?.message?.content || "";
+
+  try {
+    const parsed = JSON.parse(stripCodeFences(rawText).trim());
+    return {
+      hasCriticalInteraction: parsed.hasCriticalInteraction === true,
+      pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
+      generalWarning: parsed.generalWarning || (language === "tr"
+        ? "Listelenen ilaçlar arasında bilinen bir etkileşim tespit edilmedi."
+        : "No known interaction detected."),
+      disclaimer: language === "tr"
+        ? "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez."
+        : "This information is for general purposes only.",
+    };
+  } catch {
+    throw new Error("Yanıt işlenemedi.");
+  }
 }
