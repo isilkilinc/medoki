@@ -675,3 +675,75 @@ Kurallar:
     disclaimer: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez.",
   };
 }
+export interface InteractionResult {
+  hasCriticalInteraction: boolean;
+  pairs: {
+    drug1: string;
+    drug2: string;
+    severity: "major" | "moderate" | "minor";
+    description: string;
+    recommendation: string;
+  }[];
+  generalWarning: string;
+  disclaimer: string;
+}
+
+export async function checkDrugInteractions(
+  medicines: string[],
+  language: "tr" | "en" = "tr"
+): Promise<InteractionResult> {
+  if (medicines.length < 2) {
+    return {
+      hasCriticalInteraction: false,
+      pairs: [],
+      generalWarning: language === "tr"
+        ? "Etkileşim kontrolü için en az 2 ilaç giriniz."
+        : "Please enter at least 2 medicines for interaction check.",
+      disclaimer: language === "tr"
+        ? "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez."
+        : "This information is for general purposes only and does not replace medical advice.",
+    };
+  }
+
+  const prompt = `
+Analyze possible interactions between the following medicines:
+${medicines.map((m, i) => `${i + 1}. ${m}`).join("\n")}
+
+Return only valid JSON, language of all text fields must be: ${language === "tr" ? "Turkish" : "English"}
+
+{
+  "hasCriticalInteraction": boolean,
+  "pairs": [
+    {
+      "drug1": "string",
+      "drug2": "string",
+      "severity": "major" | "moderate" | "minor",
+      "description": "string",
+      "recommendation": "string"
+    }
+  ],
+  "generalWarning": "string",
+  "disclaimer": "string"
+}
+
+Rules:
+- Only list real, evidence-based drug interactions. If unsure, DO NOT include it.
+- severity: "major" = serious/life-threatening, "moderate" = moderate caution, "minor" = mild
+- If no interaction exists, return empty pairs array and hasCriticalInteraction: false.
+- NEVER fabricate interactions.
+- disclaimer must say this is general information and does not replace doctor/pharmacist advice.
+`.trim();
+
+  const parsed = await groqJsonCompletion(prompt, 1200);
+
+  return {
+    hasCriticalInteraction: parsed.hasCriticalInteraction === true,
+    pairs: Array.isArray(parsed.pairs) ? parsed.pairs : [],
+    generalWarning: parsed.generalWarning || (language === "tr"
+      ? "Listelenen ilaçlar arasında bilinen bir etkileşim tespit edilmedi."
+      : "No known interaction detected between the listed medicines."),
+    disclaimer: language === "tr"
+      ? "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez."
+      : "This information is for general purposes only and does not replace medical advice.",
+  };
+}
