@@ -12,6 +12,7 @@ interface HomeScreenProps {
   onAnalyze: (text: string, mode: "medicine" | "symptom") => void;
   isLoading: boolean;
   forceInputText?: string | null;
+  onProspectusAnalyze: (text: string) => void;
 }
 
 const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) => {
