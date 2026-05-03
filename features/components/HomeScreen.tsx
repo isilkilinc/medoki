@@ -3,8 +3,10 @@ import { Pill, Stethoscope, Sparkles, Zap } from "lucide-react";
 import { useLanguage } from "@/lib/i18n";
 import { checkTypo } from "@/lib/groq";
 import InteractionChecker from "./InteractionChecker";
+import ProspectusUploader from "./ProspectusUploader";
+import { FileText } from "lucide-react";
 
-type Mode = "medicine" | "symptom" | "interaction";
+type Mode = "medicine" | "symptom" | "interaction" | "prospectus";
 
 interface HomeScreenProps {
   onAnalyze: (text: string, mode: "medicine" | "symptom") => void;
@@ -101,6 +103,17 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
         >
           <Zap className="w-4 h-4 shrink-0" />
           {t("interaction.title")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setMode("prospectus")}
+          className={`flex-1 flex items-center justify-center gap-1.5 rounded-2xl px-1 sm:px-4 py-3 min-h-[48px] font-semibold border cursor-pointer transition-all text-[13px] sm:text-sm whitespace-nowrap flex-shrink-0
+            ${mode === "prospectus"
+              ? "bg-blue-500/15 border-blue-500/35 text-foreground"
+              : "bg-muted/40 border-border text-muted-foreground hover:bg-blue-500/10 hover:border-blue-500/25"}`}
+        >
+          <FileText className="w-4 h-4 shrink-0" />
+          Prospektüs
         </button>
       </div>
 
