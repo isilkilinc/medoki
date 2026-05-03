@@ -14,6 +14,7 @@ interface ResultsScreenProps {
   error: ReactNode | null;
   query: string;
   onBack: () => void;
+  isProspectusAnalysis?: boolean;
 }
 
 const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProps) => {
