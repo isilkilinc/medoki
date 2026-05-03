@@ -106,11 +106,18 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
       return (
         <>
           {/* AI badge */}
-          <div className="flex items-center gap-2 mb-3 animate-fade-in-up">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-xs font-semibold text-primary">
-              <CheckCircle className="w-3.5 h-3.5" />
-              AI Tarafından Sadeleştirildi
-            </span>
+         <div className="flex items-center gap-2 mb-3 animate-fade-in-up flex-wrap">
+            {isProspectusAnalysis ? (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 text-xs font-semibold text-blue-400">
+                <CheckCircle className="w-3.5 h-3.5" />
+                Prospektüsten Analiz Edildi
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/10 text-xs font-semibold text-primary">
+                <CheckCircle className="w-3.5 h-3.5" />
+                AI Tarafından Sadeleştirildi
+              </span>
+            )}
           </div>
           
 {/* Prospektüs yönlendirme */}
