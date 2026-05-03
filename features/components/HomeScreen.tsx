@@ -118,7 +118,9 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
       </div>
 
       {/* Etkileşim sekmesi */}
-      {mode === "interaction" ? (
+     {mode === "prospectus" ? (
+        <ProspectusUploader />
+      ) : mode === "interaction" ? (
         <InteractionChecker />
       ) : (
         <form onSubmit={handleSubmit} className="grid gap-3">
