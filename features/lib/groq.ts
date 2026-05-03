@@ -694,3 +694,79 @@ Rules:
     throw new Error("Yanıt işlenemedi.");
   }
 }
+export interface ProspectusResult {
+  medicineName: string;
+  activeIngredient: string;
+  indications: string[];
+  dosage: string;
+  sideEffects: string[];
+  contraindications: string[];
+  warnings: string[];
+  disclaimer: string;
+}
+
+export async function analyzeProspectus(
+  base64Pdf: string,
+  language: "tr" | "en" = "tr"
+): Promise<ProspectusResult> {
+  if (!API_KEY) throw new Error("API anahtarı bulunamadı.");
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0.1,
+      max_tokens: 2000,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: `Bu bir ilaç prospektüsüdür. Yalnızca bu belgede yazan bilgileri kullan, hiçbir şey uydurma.
+Aşağıdaki JSON formatında yanıt ver. Tüm metin ${language === "tr" ? "Türkçe" : "İngilizce"} olsun.
+Belgede bulunmayan bilgiler için "Prospektüste belirtilmemiş." yaz.
+
+{
+  "medicineName": "string",
+  "activeIngredient": "string",
+  "indications": ["string", "string"],
+  "dosage": "string",
+  "sideEffects": ["string", "string", "string"],
+  "contraindications": ["string", "string"],
+  "warnings": ["string", "string"],
+  "disclaimer": "Bu bilgiler yüklenen prospektüsten alınmıştır. Doktor veya eczacınıza danışmadan ilaç kullanmayın."
+}`,
+            },
+            {
+              type: "document",
+              source: {
+                type: "base64",
+                media_type: "application/pdf",
+                data: base64Pdf,
+              },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Groq hatası (${response.status}): ${err}`);
+  }
+
+  const data = await response.json();
+  const rawText = data?.choices?.[0]?.message?.content || "";
+
+  try {
+    return JSON.parse(stripCodeFences(rawText).trim());
+  } catch {
+    throw new Error("PDF analiz edilemedi. Lütfen geçerli bir prospektüs yükleyin.");
+  }
+}
