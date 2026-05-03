@@ -34,7 +34,7 @@ interface CacheRow {
 
 // ─── Normalize: arama terimlerini küçük harf + trim ile standartlaştır ────────
 function normalizeKey(text: string): string {
-  return text.trim().toLowerCase();
+  return text.trim().toLowerCase().replace(/[^a-z0-9_.-]/g, '_');
 }
 
 /**
@@ -42,7 +42,9 @@ function normalizeKey(text: string): string {
  * @returns Kayıtlı `response_data` veya `null` (bulunamazsa).
  */
 export async function getCachedAnalysis<T>(queryText: string): Promise<T | null> {
-  console.log('Supabase Okuma Denemesi:', queryText);
+  console.log('Supabase Okuma Denemesi (DEVRE DIŞI):', queryText);
+  return null; // ÖNBELLEK GEÇİCİ OLARAK KAPATILDI
+  /*
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.warn("[Supabase Cache] VITE_SUPABASE_URL eksik, okuma atlandı.");
     return null;
@@ -71,6 +73,7 @@ export async function getCachedAnalysis<T>(queryText: string): Promise<T | null>
     console.warn("[Supabase Cache] Beklenmeyen hata:", err);
     return null;
   }
+  */
 }
 
 /**
@@ -81,7 +84,9 @@ export async function setCachedAnalysis(
   queryText: string,
   responseData: unknown
 ): Promise<void> {
-  console.log('Supabase Kayıt Denemesi:', queryText);
+  console.log('Supabase Kayıt Denemesi (DEVRE DIŞI):', queryText);
+  return; // ÖNBELLEK GEÇİCİ OLARAK KAPATILDI
+  /*
   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
     console.warn("[Supabase Cache] VITE_SUPABASE_URL eksik, kayıt atlandı.");
     return;
@@ -104,4 +109,5 @@ export async function setCachedAnalysis(
   } catch (err) {
     console.warn("[Supabase Cache] Beklenmeyen hata:", err);
   }
+  */
 }

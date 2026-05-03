@@ -1,6 +1,6 @@
 import { getCachedAnalysis, setCachedAnalysis } from "./supabase";
 
-const API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
+const API_KEY = (import.meta.env.VITE_GROQ_API_KEY || "").trim();
 
 // ─── Güvenli sabit userExperiences metinleri ─────────────────────────────────
 // Model internete bağlı değil — uydurma "kullanıcı yorumu" üretmesini engelliyoruz.
@@ -267,7 +267,7 @@ function symptomProductHeadline(p: {
 }
 
 export async function analyzeMedicine(userText: string): Promise<MedicineResult> {
-  const cacheKey = `medicine:${userText.trim().toLowerCase()}`;
+  const cacheKey = `medicine_${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<MedicineResult>(cacheKey);
   if (cached) {
     console.log(`[Cache HIT] ${cacheKey}`);
@@ -353,7 +353,7 @@ export interface SymptomValidation {
 }
 
 export async function validateSymptom(userText: string): Promise<SymptomValidation> {
-  const cacheKey = `val_sym:${userText.trim().toLowerCase()}`;
+  const cacheKey = `val_sym_${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<SymptomValidation>(cacheKey);
   if (cached) return cached;
 
@@ -423,7 +423,7 @@ export async function analyzeSymptom(userText: string): Promise<SymptomResult> {
   }
   // ─────────────────────────────────────────────────────────────────────────────
 
-  const cacheKey = `symptom:${normalizedInput}`;
+  const cacheKey = `symptom_${normalizedInput}`;
   const cached = await getCachedAnalysis<SymptomResult>(cacheKey);
   if (cached) {
     console.log(`[Cache HIT] ${cacheKey}`);
@@ -521,7 +521,7 @@ Kurallar:
 export async function checkTypo(userText: string): Promise<string | null> {
   if (!userText || userText.length < 3) return null;
 
-  const cacheKey = `typo:${userText.trim().toLowerCase()}`;
+  const cacheKey = `typo_${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<string | null>(cacheKey);
   if (cached !== null && cached !== undefined) return cached;
 
@@ -557,7 +557,7 @@ export interface MedicineValidation {
 }
 
 export async function validateMedicine(userText: string): Promise<MedicineValidation> {
-  const cacheKey = `val_med:${userText.trim().toLowerCase()}`;
+  const cacheKey = `val_med_${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<MedicineValidation>(cacheKey);
   if (cached) return cached;
 
@@ -694,39 +694,28 @@ Rules:
     throw new Error("Yanıt işlenemedi.");
   }
 }
-export interface ProspectusResult {
-  medicineName: string;
-  activeIngredient: string;
-  indications: string[];
-  dosage: string;
-  sideEffects: string[];
-  contraindications: string[];
-  warnings: string[];
-  disclaimer: string;
-}
+
 
 export async function analyzeProspectus(
   pdfText: string,
-  language: "tr" | "en" = "tr"
-): Promise<ProspectusResult> {
+  language: "tr" | "en" = "tr",
+  fileName?: string
+): Promise<MedicineResult> {
   if (!API_KEY) throw new Error("API anahtarı bulunamadı.");
 
-  const prompt = `Aşağıdaki metin bir ilaç prospektüsünden alınmıştır. SADECE bu metinde yazan bilgileri kullan, hiçbir şey uydurma. Belgede bulunmayan bilgiler için "Prospektüste belirtilmemiş." yaz.
+  // GEÇİCİ OLARAK PDF ÖNBELLEĞİ KAPATILDI (Zorunlu API isteği)
+  // const fileId = fileName ? fileName.replace(/[^a-zA-Z0-9_-]/g, '') : pdfText.substring(0, 20).replace(/[^a-zA-Z0-9_-]/g, '');
+  // const cacheKey = `pdf_${fileId}_${language}`;
+  // const cached = await getCachedAnalysis<MedicineResult>(cacheKey);
+  // if (cached) {
+  //   console.log(`[Cache HIT] PDF: ${cacheKey}`);
+  //   return cached;
+  // }
+  // console.log(`[Cache MISS] PDF: ${cacheKey} → Groq API çağrılıyor`);
 
-Tüm metin ${language === "tr" ? "Türkçe" : "İngilizce"} olsun. Yalnızca geçerli JSON döndür:
-{
-  "medicineName": "string",
-  "activeIngredient": "string",
-  "indications": ["string", "string"],
-  "dosage": "string",
-  "sideEffects": ["string", "string", "string"],
-  "contraindications": ["string", "string"],
-  "warnings": ["string", "string"],
-  "disclaimer": "Bu bilgiler yüklenen prospektüsten alınmıştır. Doktor veya eczacınıza danışmadan ilaç kullanmayın."
-}
-
-Prospektüs metni:
-${pdfText}`;
+  // PDF metni çok uzun olduğunda modelin token limitini doldurmaması için
+  // sadece ilk 4.000 karakterini gönderiyoruz.
+  const truncatedText = pdfText.substring(0, 4000);
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -735,10 +724,39 @@ ${pdfText}`;
       Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "llama-3.1-8b-instant",
       temperature: 0.1,
-      max_tokens: 2000,
-      messages: [{ role: "user", content: prompt }],
+      max_tokens: 1000,
+      response_format: { type: "json_object" },
+      messages: [
+        {
+          role: "system",
+          content: `Sen bir tıbbi prospektüs analiz asistanısın. KESİNLİKLE SADECE GEÇERLİ BİR JSON OBJESİ DÖN. BAŞINDA VEYA SONUNDA HİÇBİR AÇIKLAMA VEYA MARKDOWN KULLANMA.
+Tüm metin ${language === "tr" ? "Türkçe" : "İngilizce"} olsun. Yalnızca aşağıdaki şemaya uygun geçerli JSON döndür. JSON anahtarlarını (keys) KESİNLİKLE DEĞİŞTİRME:
+{
+  "correctedTerm": "string (İlaç Adı ve Etken Madde)",
+  "purpose": "string (Kullanım Amacı)",
+  "dosage": "string",
+  "sideEffects": ["string", "string"],
+  "warnings": ["string", "string"],
+  "sensitivityWarnings": ["string", "string"],
+  "summary": "string (Sade bir özet)",
+  "disclaimer": "Bu bilgiler yüklenen prospektüsten alınmıştır. Doktor veya eczacınıza danışmadan ilaç kullanmayın.",
+  "userExperiences": []
+}
+
+ÇOK ÖNEMLİ KURALLAR:
+1. Lütfen çok kısa ve özet bir JSON dön, gereksiz uzun cümlelerden kaçın. Yanıtı üretirken kelime (token) limitlerini aşmamak için tüm metni KOPYALAMAK YERİNE sadece en kritik ve en yaygın maddeleri (en fazla 3-4 madde) ÖZETLEYEREK yaz.
+2. "correctedTerm" (İlaç Başlığı) alanını HER ZAMAN "Ticari İsim (Etken Madde)" formatında oluştur. Örneğin: Parol için "Parol (Parasetamol)", Majezik için "Majezik (Flurbiprofen)" olmalıdır. Ticari ismi PDF'in en üstündeki ana başlıktan, etken maddeyi ise "Etkin madde" veya "Formülü" bölümünden al. Eğer birden fazla etken madde varsa sadece en temel/birinci etken maddeyi parantez içine yaz.
+3. DAHA DİKKATLİ OKU: İlacın amacını bulmak için "Endikasyonlar", "Ne için kullanılır" veya "Hangi durumlarda kullanılır" başlıklarını çok titiz tara. Doğrudan bulamazsan metnin geneline bakarak ilacın amacını çıkar. Hemen "Belirtilmemiş" deme.
+4. HALK DİLİNİ KULLAN: Kullanıcıların kolayca anlaması için tıbbi terimleri halk diline çevir. Örneğin: "Analjezik" yerine "Ağrı kesici", "Antipiretik" yerine "Ateş düşürücü", "Dismenore" yerine "Adet ağrısı" gibi herkesin anlayacağı terimleri kullan. Teknik detaylara boğulmadan, en kritik bilgileri (ne işe yarar, günlük doz sınırı nedir, en yaygın yan etki nedir) kısa maddeler halinde sun.
+5. HATA PAYINI SIFIRLA: Eğer bir bilgiyi gerçekten bulamıyorsan, "Prospektüsü kontrol edin" yaz ama mümkün olduğunca metinden bu bilgileri çekmeye odaklan.`
+        },
+        {
+          role: "user",
+          content: `Aşağıdaki metin bir ilaç prospektüsünden alınmıştır. SADECE bu metinde yazan bilgileri kullan, hiçbir şey uydurma. Belgede bulunmayan bilgiler için "Prospektüste belirtilmemiş." yaz.\n\nProspektüs metni:\n${truncatedText}`
+        }
+      ],
     }),
   });
 
@@ -751,11 +769,18 @@ ${pdfText}`;
   const rawResponse = data?.choices?.[0]?.message?.content || "";
 
   try {
-    const cleaned = stripCodeFences(rawResponse).trim();
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("JSON bulunamadı");
-    return JSON.parse(jsonMatch[0]);
-  } catch {
+    let cleaned = rawResponse.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+    const startIndex = cleaned.indexOf('{');
+    const endIndex = cleaned.lastIndexOf('}');
+    if (startIndex === -1 || endIndex === -1) throw new Error("JSON bulunamadı");
+    
+    cleaned = cleaned.substring(startIndex, endIndex + 1);
+    const result = JSON.parse(cleaned);
+    // void setCachedAnalysis(cacheKey, result);
+    return result;
+  } catch (error) {
+    console.error("Gerçek Hata:", error);
+    console.error("Ham API Yanıtı:", rawResponse);
     throw new Error("PDF analiz edilemedi. Lütfen geçerli bir prospektüs yükleyin.");
   }
 }
