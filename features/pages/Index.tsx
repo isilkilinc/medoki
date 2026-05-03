@@ -33,6 +33,7 @@ const Index = () => {
   const [error, setError] = useState<ReactNode | null>(null);
   const [forceSearchInput, setForceSearchInput] = useState<string | null>(null);
   const [isProspectusAnalysis, setIsProspectusAnalysis] = useState(false);
+  const [analysisKey, setAnalysisKey] = useState<number>(Date.now());
   const { user, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
@@ -98,6 +99,7 @@ const Index = () => {
     setIsLoading(true);
     setQuery(text);
     setMode(selectedMode);
+    setAnalysisKey(Date.now());
     setScreen("results");
 
     try {
@@ -264,16 +266,38 @@ const Index = () => {
   }}
   isLoading={isLoading}
   forceInputText={forceSearchInput}
-  onProspectusAnalyze={(medicineName) => {
+  onProspectusStart={(fileName) => {
+    setError(null);
+    setResult(null);
+    setIsLoading(true);
     setIsProspectusAnalysis(true);
-    handleAnalyze(medicineName, "medicine");
+    setMode("medicine");
+    setQuery(fileName);
+    setAnalysisKey(Date.now());
+    setScreen("results");
+  }}
+  onProspectusAnalyze={(pdfResult) => {
+    setIsLoading(false);
+    if (!pdfResult || !pdfResult.correctedTerm) {
+      setError("Prospektüs okunamadı veya geçerli bir ilaç adı bulunamadı. Lütfen metin tabanlı temiz bir PDF yükleyin.");
+      setResult(null);
+      setScreen("home");
+      return;
+    }
+    setIsProspectusAnalysis(true);
+    setMode("medicine");
+    setQuery(pdfResult.correctedTerm);
+    setResult(pdfResult);
+    setAnalysisKey(Date.now());
+    setScreen("results");
   }}
 />
             </>
           ) : (
             <ResultsScreen
-  mode={mode}
-  result={result}
+              key={analysisKey}
+              mode={mode}
+              result={result}
   error={error}
   query={query}
   onBack={handleBack}
