@@ -32,6 +32,7 @@ const Index = () => {
   const [result, setResult] = useState<MedicineResult | SymptomResult | null>(null);
   const [error, setError] = useState<ReactNode | null>(null);
   const [forceSearchInput, setForceSearchInput] = useState<string | null>(null);
+  const [isProspectusAnalysis, setIsProspectusAnalysis] = useState(false);
   const { user, signOut, loading: authLoading } = useAuth();
   const navigate = useNavigate();
 
