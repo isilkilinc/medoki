@@ -133,20 +133,38 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
                 id="prospectus-input"
                 style={{ display: "none" }}
                 onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  e.currentTarget.value = "";
-                  if (file.size > 5_000_000) return;
-                  const { analyzeProspectus } = await import("../lib/groq");
-                  const base64 = await new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve((reader.result as string).split(",")[1]);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                  });
-                  const res = await analyzeProspectus(base64, language);
-                  onAnalyze(res.medicineName || file.name, "medicine");
-                }}
+  const file = e.target.files?.[0];
+  if (!file) return;
+  e.currentTarget.value = "";
+  if (file.size > 5_000_000) {
+    alert("Dosya 5MB'dan büyük olamaz.");
+    return;
+  }
+
+  // pdf.js ile metin çıkar
+  const pdfjsLib = await import("https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" as string) as any;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  let fullText = "";
+  for (let i = 1; i <= Math.min(pdf.numPages, 10); i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const pageText = content.items.map((item: any) => item.str).join(" ");
+    fullText += pageText + "\n";
+  }
+
+  if (!fullText || fullText.trim().length < 100) {
+    alert("PDF'den metin çıkarılamadı. Metin tabanlı bir PDF yükleyin.");
+    return;
+  }
+
+  const { analyzeProspectus } = await import("../lib/groq");
+  const res = await analyzeProspectus(fullText.slice(0, 8000), language);
+  onAnalyze(res.medicineName || file.name, "medicine");
+}}
               />
               <label
                 htmlFor="prospectus-input"
