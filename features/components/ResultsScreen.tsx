@@ -17,7 +17,7 @@ interface ResultsScreenProps {
   isProspectusAnalysis?: boolean;
 }
 
-const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProps) => {
+const ResultsScreen = ({ mode, result, error, query, onBack, isProspectusAnalysis }: ResultsScreenProps) => {
   const [statusMsg, setStatusMsg] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const { t } = useLanguage();
@@ -120,19 +120,27 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
             )}
           </div>
           
-{/* Prospektüs yönlendirme */}
-          <div className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-blue-500/20 bg-blue-500/5 animate-fade-in-up mb-1">
-            <p className="text-xs text-muted-foreground">
-              Bu bilgileri doğrulamak ister misiniz?
-            </p>
-            <button
-              type="button"
-              onClick={onBack}
-              className="text-xs font-semibold text-blue-400 hover:text-blue-300 shrink-0 transition-colors"
-            >
-              Prospektüs yükle →
-            </button>
-          </div>
+          {/* Prospektüs yönlendirme veya Analiz Bilgisi */}
+          {isProspectusAnalysis ? (
+            <div className="flex items-center gap-3 p-3 rounded-2xl border border-green-500/20 bg-green-500/5 animate-fade-in-up mb-1">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Bu bilgiler, yüklediğiniz orijinal prospektüs PDF'inden yapay zeka ile analiz edilerek özetlenmiştir.
+              </p>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-blue-500/20 bg-blue-500/5 animate-fade-in-up mb-1">
+              <p className="text-xs text-muted-foreground">
+                Bu bilgileri doğrulamak ister misiniz?
+              </p>
+              <button
+                type="button"
+                onClick={onBack}
+                className="text-xs font-semibold text-blue-400 hover:text-blue-300 shrink-0 transition-colors"
+              >
+                Prospektüs yükle →
+              </button>
+            </div>
+          )}
           
           {cards.map((card, i) => (
             <ResultCard
