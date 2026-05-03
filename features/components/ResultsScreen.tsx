@@ -111,7 +111,21 @@ const ResultsScreen = ({ mode, result, error, query, onBack }: ResultsScreenProp
               AI Tarafından Sadeleştirildi
             </span>
           </div>
-
+          
+{/* Prospektüs yönlendirme */}
+          <div className="flex items-center justify-between gap-3 p-3 rounded-2xl border border-blue-500/20 bg-blue-500/5 animate-fade-in-up mb-1">
+            <p className="text-xs text-muted-foreground">
+              Bu bilgileri doğrulamak ister misiniz?
+            </p>
+            <button
+              type="button"
+              onClick={onBack}
+              className="text-xs font-semibold text-blue-400 hover:text-blue-300 shrink-0 transition-colors"
+            >
+              Prospektüs yükle →
+            </button>
+          </div>
+          
           {cards.map((card, i) => (
             <ResultCard
               key={i}
