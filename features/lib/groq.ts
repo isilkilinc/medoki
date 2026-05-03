@@ -706,41 +706,17 @@ export interface ProspectusResult {
 }
 
 export async function analyzeProspectus(
-  base64Pdf: string,
+  pdfText: string,
   language: "tr" | "en" = "tr"
 ): Promise<ProspectusResult> {
   if (!API_KEY) throw new Error("API anahtarı bulunamadı.");
 
-  // 1. Adım: PDF'i metne çevir (pdfjs-dist yerine basit base64 decode)
-  const binaryStr = atob(base64Pdf);
-  const bytes = new Uint8Array(binaryStr.length);
-  for (let i = 0; i < binaryStr.length; i++) {
-    bytes[i] = binaryStr.charCodeAt(i);
-  }
-
-  // PDF'den metin çıkar — basit regex ile
-  const textDecoder = new TextDecoder("latin1");
-  const rawText = textDecoder.decode(bytes);
-  
-  // PDF içindeki okunabilir metni çek
-  const textMatches = rawText.match(/\(([^)]{3,})\)/g) || [];
-  const extractedText = textMatches
-    .map(m => m.slice(1, -1))
-    .filter(t => /[a-zA-ZğüşıöçĞÜŞİÖÇ]/.test(t))
-    .join(" ")
-    .slice(0, 8000); // Groq token limiti için kırp
-
-  if (!extractedText || extractedText.length < 100) {
-    throw new Error("PDF'den metin çıkarılamadı. Lütfen metin tabanlı bir PDF yükleyin (taranmış görüntü değil).");
-  }
-
-  // 2. Adım: Groq'a metin olarak gönder
   const prompt = `Aşağıdaki metin bir ilaç prospektüsünden alınmıştır. SADECE bu metinde yazan bilgileri kullan, hiçbir şey uydurma. Belgede bulunmayan bilgiler için "Prospektüste belirtilmemiş." yaz.
 
 Tüm metin ${language === "tr" ? "Türkçe" : "İngilizce"} olsun. Yalnızca geçerli JSON döndür:
 {
   "medicineName": "string",
-  "activeIngredient": "string", 
+  "activeIngredient": "string",
   "indications": ["string", "string"],
   "dosage": "string",
   "sideEffects": ["string", "string", "string"],
@@ -750,7 +726,7 @@ Tüm metin ${language === "tr" ? "Türkçe" : "İngilizce"} olsun. Yalnızca ge�
 }
 
 Prospektüs metni:
-${extractedText}`;
+${pdfText}`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -776,12 +752,10 @@ ${extractedText}`;
 
   try {
     const cleaned = stripCodeFences(rawResponse).trim();
-    // JSON bloğunu bul
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("JSON bulunamadı");
     return JSON.parse(jsonMatch[0]);
   } catch {
-    // Model JSON döndüremediyse ham metni parse et
-    throw new Error("PDF analiz edilemedi. PDF metin tabanlı olmalı (taranmış görüntü değil). TİTCK'tan indirilen PDF'ler genellikle çalışır.");
+    throw new Error("PDF analiz edilemedi. Lütfen geçerli bir prospektüs yükleyin.");
   }
 }
