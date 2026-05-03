@@ -15,7 +15,7 @@ interface HomeScreenProps {
   onProspectusAnalyze: (text: string) => void;
 }
 
-const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) => {
+const HomeScreen = ({ onAnalyze, isLoading, forceInputText, onProspectusAnalyze }: HomeScreenProps) => {
   const [mode, setMode] = useState<Mode>("medicine");
   const [input, setInput] = useState("");
   const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -141,28 +141,33 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
     alert("Dosya 5MB'dan büyük olamaz.");
     return;
   }
-  try {
-    const text = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsText(file, "utf-8");
-    });
-    
-    const cleaned = text
-      .replace(/[^\x20-\x7EğüşıöçĞÜŞİÖÇ\n\r\t]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim()
-      .slice(0, 8000);
-    
-    if (!cleaned || cleaned.length < 100) {
+ try {
+    const arrayBuffer = await file.arrayBuffer();
+    const uint8 = new Uint8Array(arrayBuffer);
+    let text = "";
+    const decoder = new TextDecoder("utf-8", { fatal: false });
+    const raw = decoder.decode(uint8);
+    const btMatches = raw.match(/BT[\s\S]*?ET/g) || [];
+    for (const block of btMatches) {
+      const strMatches = block.match(/\(([^)]+)\)/g) || [];
+      for (const s of strMatches) {
+        text += s.slice(1, -1) + " ";
+      }
+    }
+    // Alternatif: düz metin akışlarını da çek
+    const streamMatches = raw.match(/stream[\s\S]*?endstream/g) || [];
+    for (const stream of streamMatches) {
+      const readable = stream.replace(/[^\x20-\x7EğüşıöçĞÜŞİÖÇ]/g, " ").replace(/\s+/g, " ").trim();
+      if (readable.length > 50) text += readable + " ";
+    }
+    text = text.replace(/\s+/g, " ").trim().slice(0, 8000);
+    if (!text || text.length < 100) {
       alert("PDF'den metin çıkarılamadı. Metin tabanlı bir PDF yükleyin.");
       return;
     }
-    
     const { analyzeProspectus } = await import("../lib/groq");
-    const res = await analyzeProspectus(cleaned, language);
-onProspectusAnalyze(res.medicineName || file.name);
+    const res = await analyzeProspectus(text, language);
+    onProspectusAnalyze(res.medicineName || file.name);
   } catch (err) {
     console.error(err);
     alert("PDF okunamadı.");
