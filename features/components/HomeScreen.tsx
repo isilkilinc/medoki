@@ -6,7 +6,7 @@ import InteractionChecker from "./InteractionChecker";
 import ProspectusUploader from "./ProspectusUploader";
 import { FileText } from "lucide-react";
 
-type Mode = "medicine" | "symptom" | "interaction" | "prospectus";
+type Mode = "medicine" | "symptom" | "interaction";
 
 interface HomeScreenProps {
   onAnalyze: (text: string, mode: "medicine" | "symptom") => void;
@@ -104,22 +104,10 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
           <Zap className="w-4 h-4 shrink-0" />
           {t("interaction.title")}
         </button>
-        <button
-          type="button"
-          onClick={() => setMode("prospectus")}
-          className={`flex-1 flex items-center justify-center gap-1.5 rounded-2xl px-1 sm:px-4 py-3 min-h-[48px] font-semibold border cursor-pointer transition-all text-[13px] sm:text-sm whitespace-nowrap flex-shrink-0
-            ${mode === "prospectus"
-              ? "bg-blue-500/15 border-blue-500/35 text-foreground"
-              : "bg-muted/40 border-border text-muted-foreground hover:bg-blue-500/10 hover:border-blue-500/25"}`}
-        >
-          <FileText className="w-4 h-4 shrink-0" />
-          Prospektüs
-        </button>
+        
       </div>
 
       {/* Etkileşim sekmesi */}
-     {mode === "prospectus" ? (
-        <ProspectusUploader />
       ) : mode === "interaction" ? (
         <InteractionChecker />
       ) : (
@@ -137,6 +125,38 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
             onChange={(e) => setInput(e.target.value)}
             className="w-full min-h-[48px] px-4 py-3 rounded-2xl border border-border bg-muted/50 text-foreground placeholder:text-muted-foreground outline-none backdrop-blur-xl text-sm transition-colors focus:border-primary/40 focus:bg-muted/70"
           />
+          {mode === "medicine" && (
+            <div className="relative">
+              <input
+                type="file"
+                accept="application/pdf"
+                id="prospectus-input"
+                style={{ display: "none" }}
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  e.currentTarget.value = "";
+                  if (file.size > 5_000_000) return;
+                  const { analyzeProspectus } = await import("../lib/groq");
+                  const base64 = await new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve((reader.result as string).split(",")[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                  });
+                  const res = await analyzeProspectus(base64, language);
+                  onAnalyze(res.medicineName || file.name, "medicine");
+                }}
+              />
+              <label
+                htmlFor="prospectus-input"
+                className="flex items-center justify-center gap-2 w-full py-2.5 rounded-2xl border border-dashed border-border/60 text-xs text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 cursor-pointer transition-all"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                veya prospektüs PDF yükle
+              </label>
+            </div>
+          )}
           {suggestion && (
             <div className="text-sm font-medium animate-fade-in-up mt-1 mb-1 px-1">
               {language === "tr" ? "Bunu mu demek istediniz:" : "Did you mean:"}{" "}
