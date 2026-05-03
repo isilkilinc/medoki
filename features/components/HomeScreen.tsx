@@ -5,17 +5,24 @@ import { checkTypo } from "@/lib/groq";
 import InteractionChecker from "./InteractionChecker";
 import ProspectusUploader from "./ProspectusUploader";
 import { FileText } from "lucide-react";
+import * as pdfjsLib from "pdfjs-dist";
+import pdfWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
 type Mode = "medicine" | "symptom" | "interaction";
+
+import type { MedicineResult } from "@/lib/groq";
 
 interface HomeScreenProps {
   onAnalyze: (text: string, mode: "medicine" | "symptom") => void;
   isLoading: boolean;
   forceInputText?: string | null;
-  onProspectusAnalyze: (text: string) => void;
+  onProspectusStart: (fileName: string) => void;
+  onProspectusAnalyze: (result: MedicineResult) => void;
 }
 
-const HomeScreen = ({ onAnalyze, isLoading, forceInputText, onProspectusAnalyze }: HomeScreenProps) => {
+const HomeScreen = ({ onAnalyze, isLoading, forceInputText, onProspectusStart, onProspectusAnalyze }: HomeScreenProps) => {
   const [mode, setMode] = useState<Mode>("medicine");
   const [input, setInput] = useState("");
   const [suggestion, setSuggestion] = useState<string | null>(null);
@@ -141,33 +148,30 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText, onProspectusAnalyze 
     alert("Dosya 5MB'dan büyük olamaz.");
     return;
   }
- try {
+  
+  onProspectusStart(file.name);
+
+  try {
     const arrayBuffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
-    let text = "";
-    const decoder = new TextDecoder("utf-8", { fatal: false });
-    const raw = decoder.decode(uint8);
-    const btMatches = raw.match(/BT[\s\S]*?ET/g) || [];
-    for (const block of btMatches) {
-      const strMatches = block.match(/\(([^)]+)\)/g) || [];
-      for (const s of strMatches) {
-        text += s.slice(1, -1) + " ";
-      }
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item: any) => ("str" in item ? item.str : ""))
+        .join(" ");
+      fullText += pageText + "\n";
     }
-    // Alternatif: düz metin akışlarını da çek
-    const streamMatches = raw.match(/stream[\s\S]*?endstream/g) || [];
-    for (const stream of streamMatches) {
-      const readable = stream.replace(/[^\x20-\x7EğüşıöçĞÜŞİÖÇ]/g, " ").replace(/\s+/g, " ").trim();
-      if (readable.length > 50) text += readable + " ";
-    }
-    text = text.replace(/\s+/g, " ").trim().slice(0, 8000);
-    if (!text || text.length < 100) {
-      alert("PDF'den metin çıkarılamadı. Metin tabanlı bir PDF yükleyin.");
+
+    if (!fullText.trim()) {
+      alert("PDF'ten metin çıkarılamadı. Dosya taranmış bir resim olabilir.");
       return;
     }
     const { analyzeProspectus } = await import("../lib/groq");
-    const res = await analyzeProspectus(text, language);
-    onProspectusAnalyze(res.medicineName || file.name);
+    const res = await analyzeProspectus(fullText, language, file.name);
+    onProspectusAnalyze(res);
   } catch (err) {
     console.error(err);
     alert("PDF okunamadı.");
