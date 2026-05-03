@@ -784,3 +784,4 @@ ${extractedText}`;
     // Model JSON döndüremediyse ham metni parse et
     throw new Error("PDF analiz edilemedi. PDF metin tabanlı olmalı (taranmış görüntü değil). TİTCK'tan indirilen PDF'ler genellikle çalışır.");
   }
+}
