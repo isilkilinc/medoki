@@ -133,47 +133,40 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
                 id="prospectus-input"
                 style={{ display: "none" }}
                 onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (!file) return;
-                  e.currentTarget.value = "";
-                  if (file.size > 5_000_000) {
-                    alert("Dosya 5MB'dan büyük olamaz.");
-                    return;
-                  }
-                  try {
-                    const arrayBuffer = await file.arrayBuffer();
-                    const uint8 = new Uint8Array(arrayBuffer);
-                    let text = "";
-                    const decoder = new TextDecoder("utf-8", { fatal: false });
-                    const raw = decoder.decode(uint8);
-                    const btMatches = raw.match(/BT[\s\S]*?ET/g) || [];
-                    for (const block of btMatches) {
-                      const strMatches = block.match(/\(([^)]+)\)/g) || [];
-                      for (const s of strMatches) {
-                        text += s.slice(1, -1) + " ";
-                      }
-                      const hexMatches = block.match(/<([0-9a-fA-F]+)>/g) || [];
-                      for (const h of hexMatches) {
-                        const hex = h.slice(1, -1);
-                        for (let i = 0; i < hex.length; i += 2) {
-                          const code = parseInt(hex.slice(i, i + 2), 16);
-                          if (code > 31 && code < 127) text += String.fromCharCode(code);
-                        }
-                      }
-                    }
-                    text = text.replace(/\s+/g, " ").trim().slice(0, 8000);
-                    if (!text || text.length < 100) {
-                      alert("PDF'den metin çıkarılamadı. Metin tabanlı bir PDF yükleyin.");
-                      return;
-                    }
-                    const { analyzeProspectus } = await import("../lib/groq");
-                    const res = await analyzeProspectus(text, language);
-                    onAnalyze(res.medicineName || file.name, "medicine");
-                  } catch (err) {
-                    console.error(err);
-                    alert("PDF okunamadı. Lütfen geçerli bir prospektüs yükleyin.");
-                  }
-                }}
+  const file = e.target.files?.[0];
+  if (!file) return;
+  e.currentTarget.value = "";
+  if (file.size > 5_000_000) {
+    alert("Dosya 5MB'dan büyük olamaz.");
+    return;
+  }
+  try {
+    const text = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsText(file, "utf-8");
+    });
+    
+    const cleaned = text
+      .replace(/[^\x20-\x7EğüşıöçĞÜŞİÖÇ\n\r\t]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 8000);
+    
+    if (!cleaned || cleaned.length < 100) {
+      alert("PDF'den metin çıkarılamadı. Metin tabanlı bir PDF yükleyin.");
+      return;
+    }
+    
+    const { analyzeProspectus } = await import("../lib/groq");
+    const res = await analyzeProspectus(cleaned, language);
+    onAnalyze(res.medicineName || file.name, "medicine");
+  } catch (err) {
+    console.error(err);
+    alert("PDF okunamadı.");
+  }
+}}
               />
               <label
                 htmlFor="prospectus-input"
