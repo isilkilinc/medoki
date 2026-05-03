@@ -162,7 +162,7 @@ const HomeScreen = ({ onAnalyze, isLoading, forceInputText }: HomeScreenProps) =
     
     const { analyzeProspectus } = await import("../lib/groq");
     const res = await analyzeProspectus(cleaned, language);
-    onAnalyze(res.medicineName || file.name, "medicine");
+onProspectusAnalyze(res.medicineName || file.name);
   } catch (err) {
     console.error(err);
     alert("PDF okunamadı.");
