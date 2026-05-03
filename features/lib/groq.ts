@@ -711,6 +711,47 @@ export async function analyzeProspectus(
 ): Promise<ProspectusResult> {
   if (!API_KEY) throw new Error("API anahtarı bulunamadı.");
 
+  // 1. Adım: PDF'i metne çevir (pdfjs-dist yerine basit base64 decode)
+  const binaryStr = atob(base64Pdf);
+  const bytes = new Uint8Array(binaryStr.length);
+  for (let i = 0; i < binaryStr.length; i++) {
+    bytes[i] = binaryStr.charCodeAt(i);
+  }
+
+  // PDF'den metin çıkar — basit regex ile
+  const textDecoder = new TextDecoder("latin1");
+  const rawText = textDecoder.decode(bytes);
+  
+  // PDF içindeki okunabilir metni çek
+  const textMatches = rawText.match(/\(([^)]{3,})\)/g) || [];
+  const extractedText = textMatches
+    .map(m => m.slice(1, -1))
+    .filter(t => /[a-zA-ZğüşıöçĞÜŞİÖÇ]/.test(t))
+    .join(" ")
+    .slice(0, 8000); // Groq token limiti için kırp
+
+  if (!extractedText || extractedText.length < 100) {
+    throw new Error("PDF'den metin çıkarılamadı. Lütfen metin tabanlı bir PDF yükleyin (taranmış görüntü değil).");
+  }
+
+  // 2. Adım: Groq'a metin olarak gönder
+  const prompt = `Aşağıdaki metin bir ilaç prospektüsünden alınmıştır. SADECE bu metinde yazan bilgileri kullan, hiçbir şey uydurma. Belgede bulunmayan bilgiler için "Prospektüste belirtilmemiş." yaz.
+
+Tüm metin ${language === "tr" ? "Türkçe" : "İngilizce"} olsun. Yalnızca geçerli JSON döndür:
+{
+  "medicineName": "string",
+  "activeIngredient": "string", 
+  "indications": ["string", "string"],
+  "dosage": "string",
+  "sideEffects": ["string", "string", "string"],
+  "contraindications": ["string", "string"],
+  "warnings": ["string", "string"],
+  "disclaimer": "Bu bilgiler yüklenen prospektüsten alınmıştır. Doktor veya eczacınıza danışmadan ilaç kullanmayın."
+}
+
+Prospektüs metni:
+${extractedText}`;
+
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -721,38 +762,7 @@ export async function analyzeProspectus(
       model: "llama-3.3-70b-versatile",
       temperature: 0.1,
       max_tokens: 2000,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Bu bir ilaç prospektüsüdür. Yalnızca bu belgede yazan bilgileri kullan, hiçbir şey uydurma.
-Aşağıdaki JSON formatında yanıt ver. Tüm metin ${language === "tr" ? "Türkçe" : "İngilizce"} olsun.
-Belgede bulunmayan bilgiler için "Prospektüste belirtilmemiş." yaz.
-
-{
-  "medicineName": "string",
-  "activeIngredient": "string",
-  "indications": ["string", "string"],
-  "dosage": "string",
-  "sideEffects": ["string", "string", "string"],
-  "contraindications": ["string", "string"],
-  "warnings": ["string", "string"],
-  "disclaimer": "Bu bilgiler yüklenen prospektüsten alınmıştır. Doktor veya eczacınıza danışmadan ilaç kullanmayın."
-}`,
-            },
-            {
-              type: "document",
-              source: {
-                type: "base64",
-                media_type: "application/pdf",
-                data: base64Pdf,
-              },
-            },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content: prompt }],
     }),
   });
 
@@ -762,10 +772,10 @@ Belgede bulunmayan bilgiler için "Prospektüste belirtilmemiş." yaz.
   }
 
   const data = await response.json();
-  const rawText = data?.choices?.[0]?.message?.content || "";
+  const rawResponse = data?.choices?.[0]?.message?.content || "";
 
   try {
-    return JSON.parse(stripCodeFences(rawText).trim());
+    return JSON.parse(stripCodeFences(rawResponse).trim());
   } catch {
     throw new Error("PDF analiz edilemedi. Lütfen geçerli bir prospektüs yükleyin.");
   }
