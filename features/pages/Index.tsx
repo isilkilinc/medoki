@@ -272,12 +272,13 @@ const Index = () => {
             </>
           ) : (
             <ResultsScreen
-              mode={mode}
-              result={result}
-              error={error}
-              query={query}
-              onBack={handleBack}
-            />
+  mode={mode}
+  result={result}
+  error={error}
+  query={query}
+  onBack={handleBack}
+  isProspectusAnalysis={isProspectusAnalysis}
+/>
           )
         )}
 
