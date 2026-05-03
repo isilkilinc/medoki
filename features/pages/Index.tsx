@@ -256,14 +256,19 @@ const Index = () => {
         {activeTab === "home" && (
           screen === "home" ? (
             <>
-              <HomeScreen 
-                onAnalyze={(text, mode) => { 
-                  setForceSearchInput(null);
-                  handleAnalyze(text, mode); 
-                }} 
-                isLoading={isLoading} 
-                forceInputText={forceSearchInput}
-              />
+              <HomeScreen
+  onAnalyze={(text, mode) => {
+    setForceSearchInput(null);
+    setIsProspectusAnalysis(false);
+    handleAnalyze(text, mode);
+  }}
+  isLoading={isLoading}
+  forceInputText={forceSearchInput}
+  onProspectusAnalyze={(medicineName) => {
+    setIsProspectusAnalysis(true);
+    handleAnalyze(medicineName, "medicine");
+  }}
+/>
             </>
           ) : (
             <ResultsScreen
