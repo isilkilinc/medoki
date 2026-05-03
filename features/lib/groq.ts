@@ -775,8 +775,12 @@ ${extractedText}`;
   const rawResponse = data?.choices?.[0]?.message?.content || "";
 
   try {
-    return JSON.parse(stripCodeFences(rawResponse).trim());
+    const cleaned = stripCodeFences(rawResponse).trim();
+    // JSON bloğunu bul
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error("JSON bulunamadı");
+    return JSON.parse(jsonMatch[0]);
   } catch {
-    throw new Error("PDF analiz edilemedi. Lütfen geçerli bir prospektüs yükleyin.");
+    // Model JSON döndüremediyse ham metni parse et
+    throw new Error("PDF analiz edilemedi. PDF metin tabanlı olmalı (taranmış görüntü değil). TİTCK'tan indirilen PDF'ler genellikle çalışır.");
   }
-}
