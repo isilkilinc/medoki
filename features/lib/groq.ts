@@ -35,7 +35,7 @@ async function groqJsonCompletion(userContent: string, maxTokens: number) {
         {
           role: "system",
           content:
-            "You are a highly skilled Turkish Pharmacist with deep knowledge of local Turkish brand names and their active ingredients. You MUST recognize and correctly map the following common Turkish brands to their active compounds: Parol/Calpol → Paracetamol, Arveles → Dexketoprofen, Majezik → Flurbiprofen, Dolven/Ibufen/Nurofen → Ibuprofen, Augmentin → Amoxicillin/Clavulanate, Desmont → Montelukast, Buscopan → Hyoscine, Dikloron → Diclofenac, Voltaren → Diclofenac, Cipro → Ciprofloxacin, Xanax → Alprazolam. Treat vitamins and supplements (Magnesium, Vitamin D, Omega-3) with the same rigor as drugs. Recognize pediatric brands (Calpol, Dolven, Ibufen). ALWAYS format the correctedTerm field as: 'BrandName (ActiveIngredient)' — e.g. 'Calpol (Parasetamol)', 'Augmentin (Amoksisilin/Klavulanat)'. CRITICAL SAFETY RULE: For the 'dosage' field, NEVER invent specific mg amounts or daily frequencies. Instead, always write: 'Doz bilgisi için prospektüsü veya eczacınızı kontrol edin.' You may mention the general form (tablet, kapsül) but NOT specific numbers. Return only valid JSON, no markdown or code fences.",
+            "You are a highly skilled Turkish Pharmacist. STRICT RULES: 1) Only provide information about real, verified medicines. 2) NEVER fabricate drug information, side effects, or interactions. 3) If unsure about any information, write 'Prospektüste doğrulayın' instead. 4) You MUST recognize Turkish brands: Parol/Calpol→Paracetamol, Arveles→Dexketoprofen, Majezik→Flurbiprofen, Dolven/Ibufen/Nurofen→Ibuprofen, Augmentin→Amoxicillin/Clavulanate, Desmont→Montelukast, Buscopan→Hyoscine, Dikloron/Voltaren→Diclofenac, Cipro→Ciprofloxacin, Xanax→Alprazolam. 5) ALWAYS format correctedTerm as 'BrandName (ActiveIngredient)'. 6) For dosage field NEVER write specific mg or frequency — always write: 'Doz bilgisi için prospektüsü veya eczacınızı kontrol edin.' 7) Return only valid JSON, no markdown.", You MUST recognize and correctly map the following common Turkish brands to their active compounds: Parol/Calpol → Paracetamol, Arveles → Dexketoprofen, Majezik → Flurbiprofen, Dolven/Ibufen/Nurofen → Ibuprofen, Augmentin → Amoxicillin/Clavulanate, Desmont → Montelukast, Buscopan → Hyoscine, Dikloron → Diclofenac, Voltaren → Diclofenac, Cipro → Ciprofloxacin, Xanax → Alprazolam. Treat vitamins and supplements (Magnesium, Vitamin D, Omega-3) with the same rigor as drugs. Recognize pediatric brands (Calpol, Dolven, Ibufen). ALWAYS format the correctedTerm field as: 'BrandName (ActiveIngredient)' — e.g. 'Calpol (Parasetamol)', 'Augmentin (Amoksisilin/Klavulanat)'. CRITICAL SAFETY RULE: For the 'dosage' field, NEVER invent specific mg amounts or daily frequencies. Instead, always write: 'Doz bilgisi için prospektüsü veya eczacınızı kontrol edin.' You may mention the general form (tablet, kapsül) but NOT specific numbers. Return only valid JSON, no markdown or code fences.",
         },
         { role: "user", content: userContent },
       ],
@@ -308,6 +308,9 @@ Kurallar:
 - sensitivityWarnings: Yaygın alerjenleri ve hayvansal içerikleri tara, '⚠️' ile başlat.
 - disclaimer: Her zaman şunu içersin: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez. İlaç kullanmadan önce mutlaka prospektüsü okuyun."
 - Emin olmadığın bilgide "Prospektüste doğrulayın" yaz.
+- ASLA var olmayan ilaç bilgisi uydurma. Bilmiyorsan "Prospektüste doğrulayın" yaz.
+- sideEffects ve warnings alanlarına SADECE gerçek ve kanıtlanmış bilgileri yaz.
+- Girilen ilaç adı tanıdık değilse correctedTerm alanına "Bilinmeyen İlaç" yaz ve diğer alanlara "Prospektüste doğrulayın" yaz.
 ${userProfile?.isPregnant ? `- KRİTİK UYARI: Kullanıcı HAMİLEDİR. Bu ilacın gebelikte kullanımı hakkında mutlaka uyar. Gebelikte kontrendike ise warnings alanına açıkça yaz.` : ""}
 ${userProfile?.birthYear ? `- Kullanıcının yaşı: ${new Date().getFullYear() - userProfile.birthYear}. Yaşa özel dozaj veya uyarı varsa belirt.` : ""}
 ${userProfile?.allergies ? `- Kullanıcının alerjileri: ${userProfile.allergies}. Bu ilaçta bu alerjenlere yönelik içerik varsa sert uyarı ver.` : ""}
@@ -476,9 +479,12 @@ Kurallar:
   Şunu yaz: "Prospektüste belirtilen yetişkin dozuna göre kullanın."
 - correctedTerm: 'Semptom (Tıbbi Karşılığı)' formatında döndür.
 - 3 ila 5 ürün öner.
-- Mide/sindirim şikayetlerinde NSAİİ önerme.
-- disclaimer: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez." içersin.`.trim();
-
+- Mide/sindirim şikayetlerinde NSAİİ ÖNERME (mideyi tahriş eder).
+- Her önerilen ürün SADECE o semptomu hedeflemeli. Alakasız ürün önerme.
+- Önerilen her markayı gerçek Türkiye eczane rafından seç. Uydurma marka YAZMA.
+- Emin olmadığın marka varsa brandExamples dizisini boş bırak.
+- disclaimer: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez." içersin.
+- ASLA var olmayan ilaç veya etken madde uydurma. Bilmiyorsan o ürünü listeye ekleme.`.trim();
   const parsed = await groqJsonCompletion(prompt, 1600);
   const products = Array.isArray(parsed.products) ? parsed.products : [];
 
@@ -534,23 +540,49 @@ export async function checkTypo(userText: string): Promise<string | null> {
   const cached = await getCachedAnalysis<string | null>(cacheKey);
   if (cached !== null && cached !== undefined) return cached;
 
-  const prompt = `Kullanıcı şu tıbbi terimi/ilacı arattı: "${userText}".
-Yalnızca geçerli JSON döndür. Eğer kelimede bariz bir harf/yazım hatası varsa düzeltilmiş halini "suggestion" alanına yaz. Eğer hata yoksa veya emin değilsen "suggestion" alanını null bırak.
-ÖNEMLİ KURALLAR:
-1. Öneri yaparken sadece GERÇEK (piyasada var olan) kelimeleri referans al.
-2. Girdi, önereceğin kelimeyle %80-90 oranında uyuşmuyorsa null dön.
-3. Girdi zaten doğru yazılmış bir ilaç isiyse (Majezik, Parol, Aferin): null dön.
-4. TİCARİ MARKA - ETKEN MADDE dönüşümü YASAK: "Majezik" → "Flurbiprofen" gibi öneri yapma.
-JSON şeması:
-{
-  "suggestion": "düzeltilmiş kelime veya null"
-}`;
+  // Kod katmanı: çok kısa veya çok farklı kelimelerde AI'ya sorma
+  const trimmed = userText.trim();
+  if (trimmed.length < 4) return null;
+
+  const prompt = `Sen bir Türk eczacısın. Kullanıcı şu ilaç adını yazdı: "${trimmed}"
+
+GÖREV: Sadece ve sadece klavye kaynaklı BARIZ HARF HATASI varsa düzelt.
+
+KESIN YASAKLAR:
+- Doğru yazılmış ilaç adlarını (Parol, Majezik, Arveles, Nurofen, Augmentin vb.) ASLA değiştirme
+- Ticari marka adını etken maddeye çevirme (Majezik → Flurbiprofen YASAK)
+- Etken maddeyi marka adına çevirme (İbuprofen → Nurofen YASAK)  
+- Gerçek olmayan kelimeler önerme
+- Emin olmadığında öneri yapma
+
+SADECE şu örnekler gibi bariz harf hatalarında öneri yap:
+- "Macezik" → "Majezik" (c/j hatası)
+- "Parool" → "Parol" (fazla harf)
+- "Augmentin" → null (zaten doğru)
+- "arvles" → "Arveles" (eksik harf)
+
+Yalnızca JSON döndür:
+{"suggestion": "düzeltilmiş kelime veya null"}`;
+
   try {
-    const parsed = await groqJsonCompletion(prompt, 50);
+    const parsed = await groqJsonCompletion(prompt, 60);
     let result = parsed.suggestion || null;
-    if (result && !isLegitTypo(userText, result)) {
+
+    // Kod katmanı güvenlik: isLegitTypo kontrolü
+    if (result && !isLegitTypo(trimmed, result)) {
       result = null;
     }
+
+    // Ek güvenlik: öneri orijinalden çok farklıysa reddet
+    if (result) {
+      const origLower = trimmed.toLowerCase();
+      const suggLower = result.toLowerCase();
+      // İlk 2 harf tamamen farklıysa reddet
+      if (origLower.slice(0, 2) !== suggLower.slice(0, 2)) {
+        result = null;
+      }
+    }
+
     void setCachedAnalysis(cacheKey, result);
     return result;
   } catch {
