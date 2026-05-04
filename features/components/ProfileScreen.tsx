@@ -14,6 +14,8 @@ interface HealthProfile {
   blood_type: string;
   allergies: string;
   chronic_conditions: string;
+  birth_year: number | null;
+  is_pregnant: boolean;
 }
 
 const BLOOD_TYPES = ["Bilinmiyor", "A+", "A-", "B+", "B-", "AB+", "AB-", "0+", "0-"];
@@ -52,10 +54,12 @@ export default function ProfileScreen() {
   const { t } = useLanguage();
 
   const [profile, setProfile] = useState<HealthProfile>({
-    blood_type: "Bilinmiyor",
-    allergies: "",
-    chronic_conditions: "",
-  });
+  blood_type: "Bilinmiyor",
+  allergies: "",
+  chronic_conditions: "",
+  birth_year: null,
+  is_pregnant: false,
+});
   const [isFetching, setIsFetching] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -65,7 +69,7 @@ export default function ProfileScreen() {
     setIsFetching(true);
     supabase
       .from("profiles")
-      .select("blood_type, allergies, chronic_conditions")
+      .select("blood_type, allergies, chronic_conditions, birth_year, is_pregnant")
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data, error }) => {
@@ -73,10 +77,12 @@ export default function ProfileScreen() {
           console.warn("[Profile] Yüklenemedi:", error.message);
         } else if (data) {
           setProfile({
-            blood_type: data.blood_type || "Bilinmiyor",
-            allergies: data.allergies || "",
-            chronic_conditions: data.chronic_conditions || "",
-          });
+  blood_type: data.blood_type || "Bilinmiyor",
+  allergies: data.allergies || "",
+  chronic_conditions: data.chronic_conditions || "",
+  birth_year: data.birth_year || null,
+  is_pregnant: data.is_pregnant || false,
+});
         }
         setIsFetching(false);
       });
@@ -91,8 +97,10 @@ export default function ProfileScreen() {
         id: user.id,
         email: user.email,
         blood_type: profile.blood_type,
-        allergies: profile.allergies,
-        chronic_conditions: profile.chronic_conditions,
+allergies: profile.allergies,
+chronic_conditions: profile.chronic_conditions,
+birth_year: profile.birth_year,
+is_pregnant: profile.is_pregnant,
         updated_at: new Date().toISOString(),
       },
       { onConflict: "id" }
@@ -215,7 +223,42 @@ export default function ProfileScreen() {
               className={INPUT_CLASS}
             />
           </div>
+{/* Doğum Yılı */}
+          <div>
+            <SectionTitle icon={<User className="w-3.5 h-3.5" />} label="Doğum Yılı" />
+            <input
+              type="number"
+              min={1920}
+              max={2010}
+              value={profile.birth_year || ""}
+              onChange={(e) => setProfile(p => ({ ...p, birth_year: e.target.value ? parseInt(e.target.value) : null }))}
+              placeholder="Örn: 1990"
+              className={INPUT_CLASS}
+            />
+          </div>
 
+          {/* Gebelik */}
+          <div>
+            <SectionTitle icon={<Heart className="w-3.5 h-3.5" />} label="Gebelik Durumu" />
+            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-muted/30 border border-border">
+              <input
+                type="checkbox"
+                id="is-pregnant"
+                checked={profile.is_pregnant}
+                onChange={(e) => setProfile(p => ({ ...p, is_pregnant: e.target.checked }))}
+                className="w-4 h-4 accent-primary cursor-pointer"
+              />
+              <label htmlFor="is-pregnant" className="text-sm text-foreground cursor-pointer">
+                Şu an hamileyim
+              </label>
+            </div>
+            {profile.is_pregnant && (
+              <p className="text-xs text-amber-400 mt-2 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                Hamilelik durumunuz ilaç analizlerinde dikkate alınacak.
+              </p>
+            )}
+          </div>
           {/* Kaydet Butonu */}
           <button
             onClick={handleSave}
