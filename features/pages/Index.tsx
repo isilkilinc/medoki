@@ -9,7 +9,7 @@ import ProfileScreen from "@/components/ProfileScreen";
 import SettingsScreen from "@/components/SettingsScreen";
 import type { ReactNode } from "react";
 import { analyzeMedicine, analyzeSymptom, validateMedicine, validateSymptom } from "@/lib/groq";
-import type { MedicineResult, SymptomResult } from "@/lib/groq";
+import type { MedicineResult, SymptomResult, UserProfile } from "@/lib/groq";
 import { useLanguage } from "@/lib/i18n";
 import { useTheme } from "@/lib/theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -32,6 +32,7 @@ const Index = () => {
   const [result, setResult] = useState<MedicineResult | SymptomResult | null>(null);
   const [error, setError] = useState<ReactNode | null>(null);
   const [forceSearchInput, setForceSearchInput] = useState<string | null>(null);
+  const [userProfile, setUserProfile] = useState<UserProfile>({});
   const [isProspectusAnalysis, setIsProspectusAnalysis] = useState(false);
   const [analysisKey, setAnalysisKey] = useState<number>(Date.now());
   const { user, signOut, loading: authLoading } = useAuth();
@@ -51,7 +52,24 @@ const Index = () => {
   });
 
 
-  
+ useEffect(() => {
+  if (!user) return;
+  supabase
+    .from("profiles")
+    .select("birth_year, is_pregnant, allergies, chronic_conditions")
+    .eq("id", user.id)
+    .maybeSingle()
+    .then(({ data }) => {
+      if (data) {
+        setUserProfile({
+          birthYear: data.birth_year,
+          isPregnant: data.is_pregnant,
+          allergies: data.allergies,
+          chronicConditions: data.chronic_conditions,
+        });
+      }
+    });
+}, [user]); 
   useEffect(() => {
     if (user) {
       supabase.from("user_search_history")
@@ -175,7 +193,7 @@ const Index = () => {
           return;
         }
 
-        const res = await analyzeMedicine(text);
+        const res = await analyzeMedicine(text, userProfile);
         saveToHistory(res.correctedTerm || text);
         setResult(res);
       } else {
