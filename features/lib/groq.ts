@@ -143,7 +143,12 @@ export function normalizeUserExperiences(_raw: unknown): string[] {
   // Sabit ve doğru bilgi içeren metinler kullanıyoruz.
   return [...SAFE_USER_EXPERIENCES];
 }
-
+export interface UserProfile {
+  birthYear?: number | null;
+  isPregnant?: boolean;
+  allergies?: string;
+  chronicConditions?: string;
+}
 export interface MedicineResult {
   correctedTerm: string;
   purpose: string;
@@ -266,7 +271,7 @@ function symptomProductHeadline(p: {
   return `${ingredient} içeren ürünler (Örn: ${brandPart})`;
 }
 
-export async function analyzeMedicine(userText: string): Promise<MedicineResult> {
+export async function analyzeMedicine(userText: string, userProfile?: UserProfile): Promise<MedicineResult> {
   const cacheKey = `medicine_${userText.trim().toLowerCase()}`;
   const cached = await getCachedAnalysis<MedicineResult>(cacheKey);
   if (cached) {
@@ -303,6 +308,10 @@ Kurallar:
 - sensitivityWarnings: Yaygın alerjenleri ve hayvansal içerikleri tara, '⚠️' ile başlat.
 - disclaimer: Her zaman şunu içersin: "Bu bilgiler genel amaçlıdır; doktor veya eczacı tavsiyesinin yerine geçmez. İlaç kullanmadan önce mutlaka prospektüsü okuyun."
 - Emin olmadığın bilgide "Prospektüste doğrulayın" yaz.
+${userProfile?.isPregnant ? `- KRİTİK UYARI: Kullanıcı HAMİLEDİR. Bu ilacın gebelikte kullanımı hakkında mutlaka uyar. Gebelikte kontrendike ise warnings alanına açıkça yaz.` : ""}
+${userProfile?.birthYear ? `- Kullanıcının yaşı: ${new Date().getFullYear() - userProfile.birthYear}. Yaşa özel dozaj veya uyarı varsa belirt.` : ""}
+${userProfile?.allergies ? `- Kullanıcının alerjileri: ${userProfile.allergies}. Bu ilaçta bu alerjenlere yönelik içerik varsa sert uyarı ver.` : ""}
+${userProfile?.chronicConditions ? `- Kullanıcının kronik hastalıkları: ${userProfile.chronicConditions}. Bu durumlarla kontrendikasyon varsa belirt.` : ""}
 - Reçete önerme.`.trim();
 
   const parsed = await groqJsonCompletion(prompt, 1100);
